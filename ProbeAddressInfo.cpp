@@ -591,17 +591,21 @@ void ProbeAddressInfo::getRouteInfo(const struct in_addr *addr) throw(ProbeExcep
 	    }
 	}
 
-	// std::cout << "source: " << inet_ntoa(rtInfo->srcAddr) << std::endl;
-	// std::cout << "destination: " << inet_ntoa(rtInfo->dstAddr) << std::endl;
-	// std::cout << "gateway: " << inet_ntoa(rtInfo->gateWay) << std::endl;
-	// std::cout << "interface: " << rtInfo->ifName << std::endl;
-	// std::printf("netmask: %08x\n\n", rtInfo->netMask);
+	if (verbose > 2) {
+	    std::cerr << ">>>> routing message <<<<" << std::endl;
+	    std::cerr << "source: " << inet_ntoa(rtInfo->srcAddr) << std::endl;
+	    std::cerr << "destination: " << inet_ntoa(rtInfo->dstAddr) << std::endl;
+	    std::cerr << "gateway: " << inet_ntoa(rtInfo->gateWay) << std::endl;
+	    std::cerr << "interface: " << rtInfo->ifName << std::endl;
+	    std::fprintf(stderr, "netmask: %08x\n", rtInfo->netMask);
+	}
 
+	uint32_t x = htonl(rtInfo->netMask);
 	if (
-	    (*((uint32_t *)&addr->s_addr) & rtInfo->netMask) ==
+	    // (*((uint32_t *)&addr->s_addr) & rtInfo->netMask) ==
+	    (*((uint32_t *)&addr->s_addr) & x) ==
 	    *((uint32_t *)&rtInfo->dstAddr.s_addr)
 	) {
-	    uint32_t x = htonl(rtInfo->netMask);
 	    if (
 		inet_ntop(AF_INET, &rtInfo->dstAddr, strDestination, INET_ADDRSTRLEN) == NULL ||
 		inet_ntop(AF_INET, &rtInfo->gateWay, strGateway, INET_ADDRSTRLEN) == NULL ||
@@ -609,7 +613,11 @@ void ProbeAddressInfo::getRouteInfo(const struct in_addr *addr) throw(ProbeExcep
 	    )
 		throw ProbeException("inet_ntop");
 
-	    break;
+	    // std::cerr << "addr = " << inet_ntoa(*addr) << std::endl;
+	    // std::cerr << "mask = " << strDestinationMask << std::endl;
+	    
+	    // if (verbose <= 2)
+		break;
 	}
     }
 
