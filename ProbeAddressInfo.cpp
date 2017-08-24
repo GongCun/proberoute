@@ -464,22 +464,22 @@ static int ifname(int ifIndex, char *ifName)
 }
 
 
-struct RouteInfo 
-{
-    struct in_addr dstAddr;
-    struct in_addr srcAddr;
-    struct in_addr gateWay;
-    uint32_t netMask;
-    char ifName[IF_NAMESIZE];	// no need, just for debug
-};
-
     
 void ProbeAddressInfo::getRouteInfo(const struct in_addr *addr) throw(ProbeException)
 {
     struct nlmsghdr *nlMsg;
     struct rtmsg *rtMsg;
     struct rtattr *rtAttr;
-    struct RouteInfo *rtInfo;
+    struct RouteInfo 
+    {
+	struct in_addr dstAddr;
+	struct in_addr srcAddr;
+	struct in_addr gateWay;
+	uint32_t netMask;
+	char ifName[IF_NAMESIZE];	// no need, just for debug
+    } *rtInfo;
+
+    // struct RouteInfo *rtInfo;
     const int BUFLEN = 8192;
     char msgBuf[BUFLEN];
 
@@ -581,10 +581,10 @@ void ProbeAddressInfo::getRouteInfo(const struct in_addr *addr) throw(ProbeExcep
 
 	    case RTA_DST:
 		rtInfo->dstAddr.s_addr = *(in_addr_t *)RTA_DATA(rtAttr);
-		
+
 		for (rtInfo->netMask = 0xffffffff,
-		     count = sizeof(struct in_addr) - rtMsg->rtm_dst_len;
-		     count != 0; count--
+		     count = 32 - rtMsg->rtm_dst_len;
+		     count > 0; count--
 		) {
 		    rtInfo->netMask = rtInfo->netMask << 1;
 		}
@@ -592,12 +592,26 @@ void ProbeAddressInfo::getRouteInfo(const struct in_addr *addr) throw(ProbeExcep
 	    }
 	}
 
-	std::cout << "source: " << inet_ntoa(rtInfo->srcAddr) << std::endl;
-	std::cout << "destination: " << inet_ntoa(rtInfo->dstAddr) << std::endl;
-	std::cout << "gateway: " << inet_ntoa(rtInfo->gateWay) << std::endl;
-	std::cout << "netmask: " << inet_ntoa(*((struct in_addr *)&rtInfo->netMask))
-		  << std::endl << std::endl;
-	     
+	// std::cout << "source: " << inet_ntoa(rtInfo->srcAddr) << std::endl;
+	// std::cout << "destination: " << inet_ntoa(rtInfo->dstAddr) << std::endl;
+	// std::cout << "gateway: " << inet_ntoa(rtInfo->gateWay) << std::endl;
+	// std::cout << "interface: " << rtInfo->ifName << std::endl;
+	// std::printf("netmask: %08x\n\n", rtInfo->netMask);
+
+	if (
+	    (*((uint32_t *)&addr->s_addr) & rtInfo->netMask) ==
+	    *((uint32_t *)&rtInfo->dstAddr.s_addr)
+	) {
+	    uint32_t x = htonl(rtInfo->netMask);
+	    if (
+		inet_ntop(AF_INET, &rtInfo->dstAddr, strDestination, INET_ADDRSTRLEN) == NULL ||
+		inet_ntop(AF_INET, &rtInfo->gateWay, strGateway, INET_ADDRSTRLEN) == NULL ||
+		inet_ntop(AF_INET, (struct in_addr *)&x, strDestinationMask, INET_ADDRSTRLEN) == NULL
+	    )
+		throw ProbeException("inet_ntop");
+
+	    break;
+	}
     }
 
     free(rtInfo);
