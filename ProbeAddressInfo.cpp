@@ -439,8 +439,172 @@ void ProbeAddressInfo::getRouteInfo(const struct in_addr *addr) throw(ProbeExcep
     free(buf);
 }
 #else
+// From Stack Overflow: Getting gateway to use for a given ip in ANSI C, asked
+// by inquam, answered by nos. Modify according to the Linux manual of
+// rtnetlink(7), rtnetlink(3), netlink(7), netlink(3).
+
+extern "C" {
+    static int ifname(int ifIndex, char *ifName); 
+}
+
+static int ifname(int ifIndex, char *ifName)
+{
+    static int fd = -1;
+    struct ifreq ifr;
+    
+    if (fd < 0 && (fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0)
+	return -1;
+
+    ifr.ifr_ifindex = ifIndex;
+    if (ioctl(fd, SIOCGIFNAME, &ifr, sizeof(ifr)) < 0)
+	return -1;
+
+    strcpy(ifName, ifr.ifr_name);
+    return 0;
+}
+
+
+struct RouteInfo 
+{
+    struct in_addr dstAddr;
+    struct in_addr srcAddr;
+    struct in_addr gateWay;
+    uint32_t netMask;
+    char ifName[IF_NAMESIZE];	// no need, just for debug
+};
+
+    
 void ProbeAddressInfo::getRouteInfo(const struct in_addr *addr) throw(ProbeException)
 {
+    struct nlmsghdr *nlMsg;
+    struct rtmsg *rtMsg;
+    struct rtattr *rtAttr;
+    struct RouteInfo *rtInfo;
+    const int BUFLEN = 8192;
+    char msgBuf[BUFLEN];
+
+    int sock;
+    const int SEQ = 9999;
+    pid_t pid;
+    char *ptr;
+    int count;
+    ssize_t len, msgLen = 0;
+   
+    if ((sock = socket(AF_NETLINK, SOCK_DGRAM, NETLINK_ROUTE)) < 0)
+	throw ProbeException("socket PF_NETLINK");
+
+    bzero(msgBuf, sizeof(msgBuf));
+
+    nlMsg = (struct nlmsghdr *)msgBuf;
+    rtMsg = (struct rtmsg *)NLMSG_DATA(nlMsg);
+
+    // Fill in the nlmsg header
+    nlMsg->nlmsg_len = NLMSG_LENGTH(sizeof(struct rtmsg)); // length of message.
+    nlMsg->nlmsg_type = RTM_GETROUTE;			   // get the routes from kernel
+							   // routing table.
+    nlMsg->nlmsg_flags = NLM_F_DUMP | NLM_F_REQUEST;	   // request for dump.
+    nlMsg->nlmsg_seq = SEQ;				   // sequence of the message
+							   // sequence.
+    nlMsg->nlmsg_pid = pid = getpid();			   // PID of process sending the
+							   // request.
+    if (send(sock, nlMsg, nlMsg->nlmsg_len, 0) != nlMsg->nlmsg_len)
+	throw ProbeException("send nlmsg");
+
+    ptr = msgBuf;
+    do {
+	// Receive response from the kernel
+	if ((len = recv(sock, ptr, BUFLEN - msgLen, 0)) < 0)
+	    throw ProbeException("recv sock");
+
+	nlMsg = (struct nlmsghdr *)ptr;
+	// Check if the header is valid
+	if (!NLMSG_OK(nlMsg, len))
+	    throw ProbeException("received packet");
+	if (nlMsg->nlmsg_type == NLMSG_ERROR) {
+	    struct nlmsgerr *nlErr = (struct nlmsgerr *)NLMSG_DATA(nlMsg);
+	    if (nlErr->error < 0)
+		errno = -nlErr->error;
+	    throw ProbeException("received packet");
+	}
+
+	// Check if it's the last message
+	if (nlMsg->nlmsg_type == NLMSG_DONE)
+	    break;
+	else {
+	    // Else move the pointer to buffer appropriately
+	    ptr += len;
+	    msgLen += len;
+	}
+	
+	// Check if the message is a part of a multipart message terminated by
+	// NLMSG_DONE. Return if it's not.
+	if ((nlMsg->nlmsg_flags & NLM_F_MULTI) == 0)
+	    break;
+
+    } while (nlMsg->nlmsg_seq != (uint32_t)SEQ ||
+	     nlMsg->nlmsg_pid != (uint32_t)pid);
+
+    // Parse and record the response
+    if ((rtInfo = (struct RouteInfo *)malloc(sizeof(struct RouteInfo))) == NULL)
+	throw ProbeException("calloc RouteInfo");
+
+    for (
+	nlMsg = (struct nlmsghdr *)msgBuf;
+	NLMSG_OK(nlMsg, msgLen);
+	nlMsg = NLMSG_NEXT(nlMsg, msgLen) // will update the msgLen 
+    ) {
+	bzero(rtInfo, sizeof(struct RouteInfo));
+
+	rtMsg = (struct rtmsg *)NLMSG_DATA(nlMsg);
+	if (rtMsg->rtm_family != AF_INET ||
+	    rtMsg->rtm_table != RT_TABLE_MAIN)
+	    continue;
+
+	for (
+	    len = RTM_PAYLOAD(nlMsg), rtAttr = (struct rtattr *) RTM_RTA(rtMsg);
+	    RTA_OK(rtAttr, len);
+	    rtAttr = RTA_NEXT(rtAttr, len) // will update the len
+	) {
+	    switch (rtAttr->rta_type) {
+	    case RTA_OIF:
+		if (ifname(*(int *) RTA_DATA(rtAttr), rtInfo->ifName) < 0)
+		    throw ProbeException("ifname");
+		break;
+
+	    case RTA_GATEWAY:
+		rtInfo->gateWay.s_addr = *(in_addr_t *)RTA_DATA(rtAttr);
+		break;
+
+	    case RTA_PREFSRC:
+		rtInfo->srcAddr.s_addr = *(in_addr_t *)RTA_DATA(rtAttr);
+		break;
+
+	    case RTA_DST:
+		rtInfo->dstAddr.s_addr = *(in_addr_t *)RTA_DATA(rtAttr);
+		
+		for (rtInfo->netMask = 0xffffffff,
+		     count = sizeof(struct in_addr) - rtMsg->rtm_dst_len;
+		     count != 0; count--
+		) {
+		    rtInfo->netMask = rtInfo->netMask << 1;
+		}
+		break;
+	    }
+	}
+
+	std::cout << "source: " << inet_ntoa(rtInfo->srcAddr) << std::endl;
+	std::cout << "destination: " << inet_ntoa(rtInfo->dstAddr) << std::endl;
+	std::cout << "gateway: " << inet_ntoa(rtInfo->gateWay) << std::endl;
+	std::cout << "netmask: " << inet_ntoa(*((struct in_addr *)&rtInfo->netMask))
+		  << std::endl << std::endl;
+	     
+    }
+
+    free(rtInfo);
+    close(sock);
+
+    return;
+    
 }
 #endif
 
