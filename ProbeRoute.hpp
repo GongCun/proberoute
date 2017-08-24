@@ -25,13 +25,19 @@
 # endif
 #endif
 
-/* Get interface MTU */
+/* Get interface MTU and routing information */
 #include <sys/ioctl.h>
 #include <net/if.h>		/* struct ifreq */
 #ifdef HAVE_SOCKADDR_DL_STRUCT
 #include <net/if_dl.h>		/* struct sockaddr_dl */
 #endif
 #include <net/route.h>		/* struct rt_msghdr */
+
+#ifdef _LINUX
+#include <asm/types.h>
+#include <linux/netlink.h>
+#include <linux/rtnetlink.h>
+#endif
 
 #include <netinet/ip.h>
 #include <netinet/ip_icmp.h>
