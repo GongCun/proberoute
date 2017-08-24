@@ -350,7 +350,7 @@ extern "C" {
     static const char *mask_ntop(const struct sockaddr *sa, char *buf, const ssize_t size);
 }
 
-#ifndef _LINUX
+#if !defined _LINUX && defined HAVE_RT_MSGHDR_STRUCT
 void ProbeAddressInfo::getRouteInfo(const struct in_addr *addr) throw(ProbeException)
 {
     int sockfd;
@@ -438,7 +438,7 @@ void ProbeAddressInfo::getRouteInfo(const struct in_addr *addr) throw(ProbeExcep
 
     free(buf);
 }
-#else
+#elif defined _LINUX && defined HAVE_RTMSG_STRUCT
 // From Stack Overflow: Getting gateway to use for a given ip in ANSI C, asked
 // by inquam, answered by nos. Modify according to the Linux manual of
 // rtnetlink(7), rtnetlink(3), netlink(7), netlink(3).
@@ -464,7 +464,6 @@ static int ifname(int ifIndex, char *ifName)
 }
 
 
-    
 void ProbeAddressInfo::getRouteInfo(const struct in_addr *addr) throw(ProbeException)
 {
     struct nlmsghdr *nlMsg;
@@ -620,6 +619,17 @@ void ProbeAddressInfo::getRouteInfo(const struct in_addr *addr) throw(ProbeExcep
     return;
     
 }
+#else
+void ProbeAddressInfo::getRouteInfo(const struct in_addr *addr) throw(ProbeException)
+{
+    const char str[] = "unsupported";
+    strncpy(strDestination, str, INET_ADDRSTRLEN);
+    strncpy(strGateway, str, INET_ADDRSTRLEN);
+    strncpy(strDestinationMask, str, INET_ADDRSTRLEN);
+
+    return;
+}
+
 #endif
 
 

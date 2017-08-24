@@ -29,13 +29,32 @@ AC_CHECK_HEADERS([arpa/inet.h fcntl.h netdb.h netinet/in.h stdlib.h strings.h sy
 ##AC_TYPE_UINT32_T
 AH_TEMPLATE([HAVE_SOCKADDR_DL_STRUCT],
 [Undefine if do not have struct sockaddr_dl.])
-
 AC_CHECK_TYPE([struct sockaddr_dl],
 AC_DEFINE(HAVE_SOCKADDR_DL_STRUCT, 1, Define to 1 if <net/if_dl.h> defines struct sockaddr_dl),,[
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <net/if_dl.h>
 ])
+
+AH_TEMPLATE([HAVE_RT_MSGHDR_STRUCT],
+[Undefine if do not have struct rt_msghdr.])
+AC_CHECK_TYPE([struct rt_msghdr],
+AC_DEFINE(HAVE_RT_MSGHDR_STRUCT, 1, Define to 1 if <net/route.h> defines struct rt_msghdr),,[
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <net/route.h>
+])
+
+AH_TEMPLATE([HAVE_RTMSG_STRUCT],
+[Undefine if do not have struct rtmsg.])
+AC_CHECK_TYPE([struct rtmsg],
+AC_DEFINE(HAVE_RTMSG_STRUCT, 1, Define to 1 if <linux/rtnetlink.h> defines struct rtmsg),,[
+#include <asm/types.h>
+#include <linux/netlink.h>
+#include <linux/rtnetlink.h>
+#include <sys/socket.h>
+])
+
 
 AC_CHECK_MEMBERS([struct ifreq.ifr_mtu], [], [],
 [#include <sys/types.h>
