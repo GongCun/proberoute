@@ -83,12 +83,12 @@ public:
     int getPort() const throw(ProbeException);
 
     // Return a pointer to the sockaddr
-    sockaddr *getSockaddr() {
-        return &addr;
+    sockaddr *getSockaddr() const {
+        return (sockaddr *)&addr; // must convert explicitly
     }
 
     // Return the length of the sockaddr structure
-    socklen_t getSockaddrLen() {
+    socklen_t getSockaddrLen() const {
         return addrlen;
     }
     
@@ -111,22 +111,23 @@ inline std::ostream& operator<<(std::ostream &output,
 }
 
 
-#if 0
 class ProbePcap {
     friend class ProbeSock;
+
 private:
     std::string CMD;
-    pcap_t handle;
+    pcap_t *handle;
     int linkType;
     int ethLen;
+    char *device;
 public:
     ~ProbePcap();
-    ProbePcap(const std::string CMD =
-              "icmp[0:1] == 3 or icmp[0:1] == 11 or icmp[0:1] == 12",
-              const char *device);
+    ProbePcap(char *device,
+	      const std::string CMD) throw(ProbeException);
     char *nextPcap(int *len);
 };
 
+#if 0
 class ProbeSock {
 public:
     virtual ~ProbeSock();
