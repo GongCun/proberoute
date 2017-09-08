@@ -7,6 +7,7 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <netdb.h>              // getaddrinfo, freeaddrinfo
 #include <sys/time.h>
 #include <time.h>
 #include <sys/select.h>
@@ -43,6 +44,7 @@
 
 #include <setjmp.h>
 #include <signal.h>
+#include <strings.h>		// bzero()
 
 #include <iostream>
 #include <string>
@@ -59,7 +61,7 @@ class ProbeAddress;
 class ProbeSock;
 class ProbePcap;
 
-class ProbeException : public std::runtime_err {
+class ProbeException : public std::runtime_error {
 public:
     ProbeException(const std::string &message) throw();
     ProbeException(const std::string &message,
@@ -68,12 +70,11 @@ public:
 
 class ProbeAddress {
     friend class ProbeSock;
-public:
-    // Make a socket address for the given host and service
-    ProbeAddress(const char *host, const char *service);
+    friend std::ostream& operator<<(std::ostream&, const ProbeAddress &);
 
-    // Make a socket address for the given host and port number
-    ProbeAddress(const char *host, int port);
+public:
+    // Make a socket address for the given host and service or port
+    ProbeAddress(const char *host, const char *service) throw(ProbeException);
 
     // Return a string representation of the address
     std::string getAddress() const throw(ProbeException);
@@ -82,21 +83,35 @@ public:
     int getPort() const throw(ProbeException);
 
     // Return a pointer to the sockaddr
-    sockaddr *getSockaddr() const {
+    sockaddr *getSockaddr() {
         return &addr;
     }
 
     // Return the length of the sockaddr structure
-    socklen_t getSockaddrLen() const {
-        return addrLen;
+    socklen_t getSockaddrLen() {
+        return addrlen;
     }
     
 private:
     // Raw address portion of this object
     sockaddr addr;
-    socklen_t addrLen;
+    socklen_t addrlen;
 };
 
+inline std::ostream& operator<<(std::ostream &output,
+				const ProbeAddress &address)
+{
+    struct sockaddr_in *paddr;
+
+    paddr = (struct sockaddr_in *)&address.addr;
+
+    output << inet_ntoa(paddr->sin_addr) << ":" << ntohs(paddr->sin_port);
+
+    return output;
+}
+
+
+#if 0
 class ProbePcap {
     friend class ProbeSock;
 private:
@@ -112,7 +127,6 @@ public:
     char *nextPcap(int *len);
 };
 
-#if 0
 class ProbeSock {
 public:
     virtual ~ProbeSock();
@@ -127,5 +141,7 @@ protected:
     int sockfd;
     void createSock(int protocol);
 }
+
+#endif
 
 #endif
