@@ -133,34 +133,35 @@ class ProbePcap {
     friend class ProbeSock;
 
 private:
-    std::string CMD;
+    const char *CMD;
     pcap_t *handle;
     int linkType;
     int ethLen;
-    char *device;
+    const char *DEV;
+    struct bpf_program bpfCode;
 public:
     ~ProbePcap();
-    ProbePcap(char *device,
-	      const std::string CMD) throw(ProbeException);
+    ProbePcap(const char *,
+	      const char *) throw(ProbeException);
     char *nextPcap(int *len);
 };
 
-#if 0
 class ProbeSock {
 public:
     virtual ~ProbeSock();
-    ProbeAddress getLocalAddress() throw(ProbeException);
-    int recvIcmp(char *buf, int len);
-    virtual sendPacket();
-    virtual buildHeader();
-    virtual fragPacket();
+    virtual ProbeSock(int protocol);
+    // virtual sendPacket();
+    // virtual buildHeader();
+    // virtual fragPacket();
+    // int recvIcmp(char *buf, int len);
+    static uint16_t checksum(uint16_t * addr, int len);
+    static int do_checksum(u_char *buf, int protocol, int len);
 
 protected:
-    ProbeSock();
     int rawfd;
-    void createSock(int protocol);
+    int pmtu;
+    int packLen;
+    ProbeAddress probeAddress;
 }
-
-#endif
 
 #endif
