@@ -57,15 +57,21 @@
                                  // when a packet is seen. In some OS (such as AIX),
                                  // this parameter does not take effect.
 
+enum ErrType { SYS, MSG };
+
 class ProbeAddress;
 class ProbeSock;
 class ProbePcap;
 
-class ProbeException : public std::runtime_error {
+class ProbeException : public std::exception {
+private:
+    std::string msg;
 public:
-    ProbeException(const std::string &message) throw();
-    ProbeException(const std::string &message,
-                   const std::string &detail) throw();
+    ~ProbeException() throw() {};
+    ProbeException(const std::string &, ErrType type = SYS) throw();
+    ProbeException(const std::string &,
+                   const std::string &) throw();
+    const char *what() const throw();
 };
 
 class ProbeAddress {
@@ -73,43 +79,55 @@ class ProbeAddress {
     friend std::ostream& operator<<(std::ostream&, const ProbeAddress &);
 
 public:
+    // Make a socket address for the given host and service or port;
+    // Set the local address from given arguments or use connect() to
+    // determine outgoing interface.
+    
+    ProbeAddress(const char *foreignHost, const char *foreignService,
+		 const char *localHost = NULL, int localPort = 0) throw(ProbeException);
+
     // Make a socket address for the given host and service or port
-    ProbeAddress(const char *host, const char *service) throw(ProbeException);
+    // ProbeAddress(const char *host, int port) throw(ProbeException);
 
-    // Return a string representation of the address
-    std::string getAddress() const throw(ProbeException);
-
-    // Return a numeric value of the port
-    int getPort() const throw(ProbeException);
-
-    // Return a pointer to the sockaddr
-    sockaddr *getSockaddr() const {
-        return (sockaddr *)&addr; // must convert explicitly
+    sockaddr *getLocalSockaddr() {
+        return &localAddr;
     }
 
-    // Return the length of the sockaddr structure
-    socklen_t getSockaddrLen() const {
-        return addrlen;
+    socklen_t getLocalSockaddrLen() const {
+        return localAddrLen;
+    }
+
+    sockaddr *getForeignSockaddr() {
+        return &foreignAddr;
+    }
+
+    socklen_t getForeignSockaddrLen() const {
+        return foreignAddrLen;
     }
     
 private:
     // Raw address portion of this object
-    sockaddr addr;
-    socklen_t addrlen;
+    int sockfd;			// only for fetching interface
+				// information, not to transfer data.
+    sockaddr localAddr, foreignAddr;
+    socklen_t localAddrLen, foreignAddrLen;
 };
 
 inline std::ostream& operator<<(std::ostream &output,
 				const ProbeAddress &address)
 {
-    struct sockaddr_in *paddr;
+ 
+    struct sockaddr_in *laddr, *faddr;
 
-    paddr = (struct sockaddr_in *)&address.addr;
+    laddr = (struct sockaddr_in *)&address.localAddr;
+    faddr = (struct sockaddr_in *)&address.foreignAddr;
 
-    output << inet_ntoa(paddr->sin_addr) << ":" << ntohs(paddr->sin_port);
+    output << "local: " << inet_ntoa(laddr->sin_addr) << ":" << ntohs(laddr->sin_port);
+    output << '\n';
+    output << "foreign: " << inet_ntoa(faddr->sin_addr) << ":" << ntohs(faddr->sin_port);
 
     return output;
 }
-
 
 class ProbePcap {
     friend class ProbeSock;
@@ -139,7 +157,7 @@ public:
 
 protected:
     ProbeSock();
-    int sockfd;
+    int rawfd;
     void createSock(int protocol);
 }
 
