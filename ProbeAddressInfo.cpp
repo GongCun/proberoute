@@ -5,20 +5,20 @@ void ProbeAddressInfo::getDeviceInfo() throw(ProbeException)
 {
     int sockfd;
     int lastlen, len;
-    short flags;
+    short flags, mtu;
     struct ifconf ifc;
     struct ifreq *ifr, ifrcopy;
     struct sockaddr_in *sinptr;
-    deviceInfo *deviceInfoPtr;
+    struct sockaddr *addr, *brdaddr, *netmask;
     char *buf, *ptr;
     char *cptr;
+    std::string name;
 
     if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0)
         throw ProbeException("socket error");
 
     lastlen = 0;
     len = 100 * sizeof(struct ifreq);        // initial buffer size guess
-    deviceInfoPtr = new deviceInfo;
 
     // If the buffer length is not large enough, the result is
     // truncated and ioctl() return success. So we need issue the
@@ -75,58 +75,63 @@ void ProbeAddressInfo::getDeviceInfo() throw(ProbeException)
 	ifrcopy = *ifr;
 	if (ioctl(sockfd, SIOCGIFFLAGS, &ifrcopy) < 0)
 	    throw ProbeException("ioctl SIOCGIFFLAGS");
-	if ((flags = ifrcopy.ifr_flags) & IFF_UP == 0)
+	if (((flags = ifrcopy.ifr_flags) & IFF_UP) == 0)
 	    continue;			     // ignore if interface not up
 
-	deviceInfoPtr->flags = flags;	     // IFF_xxx values
+	// deviceInfoPtr->flags = flags;	     // IFF_xxx values
 
 #if defined(SIOCGIFMTU) && defined(HAVE_STRUCT_IFREQ_IFR_MTU)
 	if (ioctl(sockfd, SIOCGIFMTU, &ifrcopy) < 0)
 	    throw ProbeException("ioctl SIOCGIFMTU");
-	deviceInfoPtr->mtu = ifrcopy.ifr_mtu;
+	mtu = ifrcopy.ifr_mtu;
 #else
-	deviceInfoPtr->mtu = 0;
+	mtu = 0;
 #endif
 
-	deviceInfoPtr->name = ifr->ifr_name;
+        name = ifr->ifr_name;
 	
 	assert(ifr->ifr_addr.sa_family == AF_INET);
 
 	sinptr = (struct sockaddr_in *)&ifr->ifr_addr;
-	deviceInfoPtr->addr = (struct sockaddr *)calloc(1, sizeof(struct sockaddr_in));
-	if (!deviceInfoPtr->addr)
+	addr = (struct sockaddr *)calloc(1, sizeof(struct sockaddr_in));
+        // std::printf("addr: %p\n", addr);
+	if (!addr)
 	    throw ProbeException("calloc");
-	memcpy(deviceInfoPtr->addr, sinptr, sizeof(struct sockaddr_in));
+	memcpy(addr, sinptr, sizeof(struct sockaddr_in));
 
 #ifdef SIOCGIFBRDADDR
 	if (flags & IFF_BROADCAST) {
 	    if (ioctl(sockfd, SIOCGIFBRDADDR, &ifrcopy) < 0)
 		throw ProbeException("ioctl SIOCGIFBRDADDR");
 	    sinptr = (struct sockaddr_in *)&ifrcopy.ifr_broadaddr;
-	    deviceInfoPtr->brdaddr = (struct sockaddr *)calloc(1, sizeof(struct sockaddr_in));
-	    if (!deviceInfoPtr->brdaddr)
+	    brdaddr = (struct sockaddr *)calloc(1, sizeof(struct sockaddr_in));
+	    if (!brdaddr)
 		throw ProbeException("calloc");
-	    memcpy(deviceInfoPtr->brdaddr, sinptr, sizeof(struct sockaddr_in));
+	    memcpy(brdaddr, sinptr, sizeof(struct sockaddr_in));
 	}
 #else
-	deviceInfoPtr->brdaddr = (struct sockaddr *)NULL;
+	brdaddr = (struct sockaddr *)NULL;
 #endif
 
 #ifdef SIOCGIFNETMASK
 	if (ioctl(sockfd, SIOCGIFNETMASK, &ifrcopy) < 0)
 	    throw ProbeException("ioctl SIOCGIFNETMASK");
 	sinptr = (struct sockaddr_in *)&ifrcopy.ifr_addr;
-	deviceInfoPtr->netmask = (struct sockaddr *)calloc(1, sizeof(struct sockaddr_in));
-	if (!deviceInfoPtr)
+	netmask = (struct sockaddr *)calloc(1, sizeof(struct sockaddr_in));
+	if (!netmask)
 	    throw ProbeException("calloc");
-	memcpy(deviceInfoPtr->netmask, sinptr, sizeof(struct sockaddr_in));
+	memcpy(netmask, sinptr, sizeof(struct sockaddr_in));
 #else
-	deviceInfoPtr->netmask = (struct sockaddr *)NULL;
+	netmask = (struct sockaddr *)NULL;
 #endif
 
 	// insert the device information to the list
-	deviceInfoList.push_back(*deviceInfoPtr);
-	
+	deviceInfoList.push_back(deviceInfo(name,
+                                            mtu,
+                                            flags,
+                                            addr,
+                                            brdaddr,
+                                            netmask));
     }
     
 }
@@ -157,10 +162,20 @@ void ProbeAddressInfo::printDeviceInfo()
 
 }
 
+void ProbeAddressInfo::clearDeviceInfo()
+{
+    for (std::list<deviceInfo>::iterator it = deviceInfoList.begin();
+	 it != deviceInfoList.end(); ++it) {
+	safeFree(it->addr); safeFree(it->brdaddr); safeFree(it->netmask);
+    }
+
+    deviceInfoList.clear();
+}
+
 ProbeAddressInfo::ProbeAddressInfo(const char *foreignHost, const char *foreignService,
                                    const char *localHost, int localPort,
-                                   const char *dev, int mtu) throw(ProbeException) :
-    device(dev), devMtu(mtu)
+                                   const char *dev, int mtu) throw(ProbeException)
+    // : device(dev), devMtu(mtu)
 {
     struct addrinfo hints, *res, *curr;
     struct sockaddr_in *paddr;
@@ -187,7 +202,7 @@ ProbeAddressInfo::ProbeAddressInfo(const char *foreignHost, const char *foreignS
 		sockfd = -1;
 	    }
 	}
-    
+
     if (sockfd < 0) {
 	freeaddrinfo(res);
 	throw ProbeException("Unable to connect by UDP");
@@ -210,6 +225,25 @@ ProbeAddressInfo::ProbeAddressInfo(const char *foreignHost, const char *foreignS
 
     // anyway, we define the local port ourselves
     paddr->sin_port = htons(localPort);
+
+#if 0
+    // fetch the device name or mtu size by the IP address
+    getDeviceInfo();
+    int exist = 0;
+    for (std::list<deviceInfo>::iterator it = deviceInfoList.begin();
+	 it != deviceInfoList.end(); ++it) {
+	if (dev && device == it->name) exist = 1;
+
+	if (((struct sockaddr_in *)it->addr)->sin_addr.s_addr ==
+	    ((struct sockaddr_in *)&localAddr)->sin_addr.s_addr) {
+	    if (!dev) device = it->name;
+	    if (!mtu) devMtu = it->mtu;
+	}
+    }
+    clearDeviceInfo();
+    if (!exist)
+	throw ProbeException("device not exist");
+#endif
 
 }
 
