@@ -1,9 +1,9 @@
 #ifndef _PROBEROUTE_H
 #define _PROBEROUTE_H
 
+#include "config.h"
+
 #include <cstdlib>
-// #include <errno.h>
-// #include <assert.h>
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -49,7 +49,8 @@
 #include <iostream>
 #include <string>
 #include <stdexcept>
-#include <vector>
+#include <algorithm>
+#include <list>
 
 #define CAP_LEN 1514             // Maximum capture length
 #define CAP_TIMEOUT 500          // Milliseconds; This timeout is used to arrange
@@ -57,9 +58,18 @@
                                  // when a packet is seen. In some OS (such as AIX),
                                  // this parameter does not take effect.
 
+#ifndef IFNAMSIZ
+#define IFNAMSIZ 16
+#endif
+
+inline void safeFree(void *point)
+{
+    if (point) free(point);
+}
+    
 enum ErrType { SYS, MSG };
 
-class ProbeAddress;
+class ProbeAddressInfo;
 class ProbeSock;
 class ProbePcap;
 
@@ -74,20 +84,38 @@ public:
     const char *what() const throw();
 };
 
-class ProbeAddress {
+class ProbeAddressInfo {
     friend class ProbeSock;
-    friend std::ostream& operator<<(std::ostream&, const ProbeAddress &);
+    friend std::ostream& operator<<(std::ostream&,
+				    const ProbeAddressInfo &);
 
+private:
+    // Raw address portion of this object
+    int sockfd;			// only for fetching interface
+				// information, not to transfer data.
+    sockaddr localAddr, foreignAddr;
+    socklen_t localAddrLen, foreignAddrLen;
+    const std::string device;
+    int devMtu;
+
+    // the device information element
+    struct deviceInfo {
+        std::string name;               // interface name
+        short mtu;                      // interface MTU
+        short flags;                    // IFF_xxx constants from <net/if.h>
+        struct sockaddr *addr;          // primary address
+        struct sockaddr *brdaddr;       // broadcast address
+        struct sockaddr *netmask;	// netmask address
+    };
+ 
 public:
     // Make a socket address for the given host and service or port;
     // Set the local address from given arguments or use connect() to
     // determine outgoing interface.
     
-    ProbeAddress(const char *foreignHost, const char *foreignService,
-		 const char *localHost = NULL, int localPort = 0) throw(ProbeException);
-
-    // Make a socket address for the given host and service or port
-    // ProbeAddress(const char *host, int port) throw(ProbeException);
+    ProbeAddressInfo(const char *foreignHost, const char *foreignService,
+                     const char *localHost = NULL, int localPort = 0,
+                     const char *dev = NULL, int mtu = 0) throw(ProbeException);
 
     sockaddr *getLocalSockaddr() {
         return &localAddr;
@@ -104,17 +132,29 @@ public:
     socklen_t getForeignSockaddrLen() const {
         return foreignAddrLen;
     }
-    
-private:
-    // Raw address portion of this object
-    int sockfd;			// only for fetching interface
-				// information, not to transfer data.
-    sockaddr localAddr, foreignAddr;
-    socklen_t localAddrLen, foreignAddrLen;
+
+    std::string getDevice() const {
+        return device;
+    }
+
+    int getDevMtu() const {
+        return devMtu;
+    }
+   
+
+    std::list<deviceInfo> deviceInfoList; // the entry of device linked list
+
+    void getDeviceInfo() throw(ProbeException);
+    void clearDeviceInfo();
+    void printDeviceInfo();
+
+    // fetch the device information from device list
+    deviceInfo& fetchDevice() throw(ProbeException);
+
 };
 
 inline std::ostream& operator<<(std::ostream &output,
-				const ProbeAddress &address)
+				const ProbeAddressInfo &address)
 {
  
     struct sockaddr_in *laddr, *faddr;
@@ -133,11 +173,11 @@ class ProbePcap {
     friend class ProbeSock;
 
 private:
-    const char *CMD;
+    const std::string CMD;
     pcap_t *handle;
     int linkType;
     int ethLen;
-    const char *DEV;
+    const std::string DEV;
     struct bpf_program bpfCode;
 public:
     ~ProbePcap();
@@ -146,6 +186,7 @@ public:
     char *nextPcap(int *len);
 };
 
+#if 0
 class ProbeSock {
 public:
     virtual ~ProbeSock();
@@ -161,7 +202,8 @@ protected:
     int rawfd;
     int pmtu;
     int packLen;
-    ProbeAddress probeAddress;
+    // ProbeAddress probeAddress;
 }
+#endif
 
 #endif
