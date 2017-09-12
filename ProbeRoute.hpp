@@ -64,10 +64,7 @@
 
 inline void safeFree(void *point)
 {
-    if (point) {
-        free(point);
-        point = NULL;
-    }
+    if (point) free(point);
 }
 
 inline const char *nullToEmpty(const char *s)
@@ -120,8 +117,46 @@ private:
                    struct sockaddr *pn) :
             name(n), mtu(m), flags(f), addr(pa), brdaddr(pb), netmask(pn) {
         }
+
+#if 0
+
+        deviceInfo(const deviceInfo& other) throw(ProbeException):
+            name(other.name), mtu(other.mtu), flags(other.flags) {
+
+            addr = (struct sockaddr *)calloc(1, sizeof(struct sockaddr));
+            if (!addr) throw ProbeException("calloc");
+            memcpy(addr, other.addr, sizeof(*other.addr));
+
+            brdaddr = (struct sockaddr *)calloc(1, sizeof(struct sockaddr));
+            if (!brdaddr) throw ProbeException("calloc");
+            memcpy(brdaddr, other.brdaddr, sizeof(*other.brdaddr));
+
+            netmask = (struct sockaddr *)calloc(1, sizeof(struct sockaddr));
+            if (!netmask) throw ProbeException("calloc");
+            memcpy(netmask, other.netmask, sizeof(*other.netmask));
+        }
+
+        deviceInfo& operator=(const deviceInfo& other) throw(ProbeException) {
+            name = other.name, mtu = other.mtu, flags = other.flags;
+
+            addr = (struct sockaddr *)calloc(1, sizeof(struct sockaddr));
+            if (!addr) throw ProbeException("calloc");
+            memcpy(addr, other.addr, sizeof(*other.addr));
+
+            brdaddr = (struct sockaddr *)calloc(1, sizeof(struct sockaddr));
+            if (!brdaddr) throw ProbeException("calloc");
+            memcpy(brdaddr, other.brdaddr, sizeof(*other.brdaddr));
+
+            netmask = (struct sockaddr *)calloc(1, sizeof(struct sockaddr));
+            if (!netmask) throw ProbeException("calloc");
+            memcpy(netmask, other.netmask, sizeof(*other.netmask));
+
+            return *this;
+        }
+#endif
+
         ~deviceInfo() {
-            // Nothing to do, we free the resource in clearDeviceInfo().
+            // safeFree(addr); safeFree(brdaddr); safeFree(netmask);
         }
     };
  
