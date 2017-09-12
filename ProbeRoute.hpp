@@ -64,7 +64,15 @@
 
 inline void safeFree(void *point)
 {
-    if (point) free(point);
+    if (point) {
+        free(point);
+        point = NULL;
+    }
+}
+
+inline const char *nullToEmpty(const char *s)
+{
+    return (s ? s : "");
 }
     
 enum ErrType { SYS, MSG };
@@ -95,8 +103,8 @@ private:
 				// information, not to transfer data.
     sockaddr localAddr, foreignAddr;
     socklen_t localAddrLen, foreignAddrLen;
-    const std::string device;
-    int devMtu;
+    std::string device;
+    short devMtu;
 
     // the device information element
     struct deviceInfo {
@@ -106,6 +114,17 @@ private:
         struct sockaddr *addr;          // primary address
         struct sockaddr *brdaddr;       // broadcast address
         struct sockaddr *netmask;	// netmask address
+        deviceInfo(std::string n,
+                   short m,
+                   short f,
+                   struct sockaddr *pa,
+                   struct sockaddr *pb,
+                   struct sockaddr *pn) :
+            name(n), mtu(m), flags(f), addr(pa), brdaddr(pb), netmask(pn) {
+        }
+        ~deviceInfo() {
+            // Nothing to do, we free the resource in clearDeviceInfo().
+        }
     };
  
 public:
@@ -115,7 +134,7 @@ public:
     
     ProbeAddressInfo(const char *foreignHost, const char *foreignService,
                      const char *localHost = NULL, int localPort = 0,
-                     const char *dev = NULL, int mtu = 0) throw(ProbeException);
+                     const char *dev = NULL, short mtu = 0) throw(ProbeException);
 
     sockaddr *getLocalSockaddr() {
         return &localAddr;
@@ -173,11 +192,11 @@ class ProbePcap {
     friend class ProbeSock;
 
 private:
-    const std::string CMD;
     pcap_t *handle;
     int linkType;
     int ethLen;
     const std::string DEV;
+    const std::string CMD;
     struct bpf_program bpfCode;
 public:
     ~ProbePcap();
