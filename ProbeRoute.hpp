@@ -99,8 +99,6 @@ class ProbeAddressInfo {
 
 private:
     // Raw address portion of this object
-    int sockfd;			// only for fetching interface
-				// information, not to transfer data.
     sockaddr localAddr, foreignAddr;
     socklen_t localAddrLen, foreignAddrLen;
     std::string device;
@@ -181,9 +179,12 @@ inline std::ostream& operator<<(std::ostream &output,
     laddr = (struct sockaddr_in *)&address.localAddr;
     faddr = (struct sockaddr_in *)&address.foreignAddr;
 
-    output << "local: " << inet_ntoa(laddr->sin_addr) << ":" << ntohs(laddr->sin_port);
-    output << '\n';
-    output << "foreign: " << inet_ntoa(faddr->sin_addr) << ":" << ntohs(faddr->sin_port);
+    output << "local: " << inet_ntoa(laddr->sin_addr) << ":" << ntohs(laddr->sin_port)
+           << '\n';
+    output << "foreign: " << inet_ntoa(faddr->sin_addr) << ":" << ntohs(faddr->sin_port)
+           << '\n';
+    output << "device: " << address.device << '\n';
+    output << "mtu: " << address.devMtu;
 
     return output;
 }
@@ -226,3 +227,4 @@ protected:
 #endif
 
 #endif
+
