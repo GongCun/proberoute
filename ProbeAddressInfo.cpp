@@ -159,18 +159,19 @@ void ProbeAddressInfo::freeDeviceInfo()
     int i = 0;
     struct sockaddr_in *ptr;
 
-    for (p = &deviceInfoList; *p; ) {
-	ptr = (struct sockaddr_in *)(*p)->addr;
+    for (p = &deviceInfoList; *p; p = pnext) {
+	ptr = (struct sockaddr_in *)p->addr;
 	std::cout << inet_ntoa(ptr->sin_addr) << std::endl;
-	std::printf("*p = %p, deviceInfoList = %p\n", *p, deviceInfoList);
+	std::printf("p = %p, deviceInfoList = %p\n", p);
 
         // safeFree((*p)->addr); safeFree((*p)->brdaddr); safeFree((*p)->netmask);
-        pnext = (*p)->next;	// can't fetch pnext after delete
-        delete *p;		// the p{} itself
+        pnext = p->next;	// can't fetch pnext after delete
+        delete p;		// the p{} itself
+	// p = NULL;
 	// *p = (struct deviceInfo *)NULL;
 	// std::printf("*p = %p, deviceInfoList = %p\n", *p, deviceInfoList);
-	p = &pnext;
-	std::printf("*p = %p, deviceInfoList = %p\n", *p, deviceInfoList);
+	// p = &pnext;
+	// std::printf("*p = %p, deviceInfoList = %p\n", *p, deviceInfoList);
     }
 
     // deviceInfoList = NULL;
