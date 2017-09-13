@@ -50,7 +50,7 @@
 #include <string>
 #include <stdexcept>
 #include <algorithm>
-#include <list>
+// #include <list>
 
 #define CAP_LEN 1514             // Maximum capture length
 #define CAP_TIMEOUT 500          // Milliseconds; This timeout is used to arrange
@@ -109,55 +109,13 @@ private:
         struct sockaddr *addr;          // primary address
         struct sockaddr *brdaddr;       // broadcast address
         struct sockaddr *netmask;	// netmask address
-        deviceInfo(std::string n,
-                   short m,
-                   short f,
-                   struct sockaddr *pa,
-                   struct sockaddr *pb,
-                   struct sockaddr *pn) :
-            name(n), mtu(m), flags(f), addr(pa), brdaddr(pb), netmask(pn) {
-        }
-
-#if 0
-
-        deviceInfo(const deviceInfo& other) throw(ProbeException):
-            name(other.name), mtu(other.mtu), flags(other.flags) {
-
-            addr = (struct sockaddr *)calloc(1, sizeof(struct sockaddr));
-            if (!addr) throw ProbeException("calloc");
-            memcpy(addr, other.addr, sizeof(*other.addr));
-
-            brdaddr = (struct sockaddr *)calloc(1, sizeof(struct sockaddr));
-            if (!brdaddr) throw ProbeException("calloc");
-            memcpy(brdaddr, other.brdaddr, sizeof(*other.brdaddr));
-
-            netmask = (struct sockaddr *)calloc(1, sizeof(struct sockaddr));
-            if (!netmask) throw ProbeException("calloc");
-            memcpy(netmask, other.netmask, sizeof(*other.netmask));
-        }
-
-        deviceInfo& operator=(const deviceInfo& other) throw(ProbeException) {
-            name = other.name, mtu = other.mtu, flags = other.flags;
-
-            addr = (struct sockaddr *)calloc(1, sizeof(struct sockaddr));
-            if (!addr) throw ProbeException("calloc");
-            memcpy(addr, other.addr, sizeof(*other.addr));
-
-            brdaddr = (struct sockaddr *)calloc(1, sizeof(struct sockaddr));
-            if (!brdaddr) throw ProbeException("calloc");
-            memcpy(brdaddr, other.brdaddr, sizeof(*other.brdaddr));
-
-            netmask = (struct sockaddr *)calloc(1, sizeof(struct sockaddr));
-            if (!netmask) throw ProbeException("calloc");
-            memcpy(netmask, other.netmask, sizeof(*other.netmask));
-
-            return *this;
-        }
-#endif
-
-        ~deviceInfo() {
-            // safeFree(addr); safeFree(brdaddr); safeFree(netmask);
-        }
+        struct deviceInfo *next;        // next of these structures
+        deviceInfo(): name(""), mtu(0), flags(0),
+                      addr(NULL), brdaddr(NULL), netmask(NULL),
+                      next(NULL) {}
+	~deviceInfo() {
+	    safeFree(addr); safeFree(brdaddr); safeFree(netmask);
+	}
     };
  
 public:
@@ -194,14 +152,10 @@ public:
     }
    
 
-    std::list<deviceInfo> deviceInfoList; // the entry of device linked list
-
+    struct deviceInfo *deviceInfoList; // the entry of device linked list
     void getDeviceInfo() throw(ProbeException);
-    void clearDeviceInfo();
+    void freeDeviceInfo();
     void printDeviceInfo();
-
-    // fetch the device information from device list
-    deviceInfo& fetchDevice() throw(ProbeException);
 
 };
 
