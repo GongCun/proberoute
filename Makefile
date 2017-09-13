@@ -1,24 +1,19 @@
-CC = xlc++ -g
-override CFLAGS += -qflag=i:i -qinfo=use
-##override CFLAGS += 
-override CPPFLAGS += -qflag=i:i -qinfo=use -I/usr/include -D_AIX 
-##override CPPFLAGS += -I/usr/include -D_AIX 
-OBJS = main.o ProbeAddress.o ProbeException.o
-LIBS = -L/usr/lib -lpcap 
+CC = c++
+override CFLAGS += -Wall -g
+override CPPFLAGS += -Wall -g
+override LIBS += -lpcap 
+
+OBJS = main.o ProbeAddressInfo.o ProbeException.o ProbePcap.o ProbeSock.o do_checksum.o
 
 PROGS = proberoute
 
 all: ${PROGS}
 
-
 proberoute: $(OBJS) 
 	${CC} ${CFLAGS} -o $@ $^ $(LIBS)
 
-# No need, just for g++
-#$(OBJS): export CPLUS_INCLUDE_PATH = /usr/include
-#$(OBJS): export OBJC_INCLUDE_PATH = /usr/lib
-$(OBJS): %.o: %.cpp
-	$(CC) -c $(CPPFLAGS) -o $@ $< 
+%.o: %.cpp ProbeRoute.hpp config.h
+	$(CC) $(CFLAGS) -c -o $@ $<
 
 clean:
 	rm -f ${PROGS} *.o core *.BAK *~

@@ -45,8 +45,10 @@
 #include <setjmp.h>
 #include <signal.h>
 #include <strings.h>		// bzero()
+#include <assert.h>
 
 #include <iostream>
+#include <sstream>
 #include <string>
 #include <stdexcept>
 #include <algorithm>
@@ -62,6 +64,17 @@
 #define IFNAMSIZ 16
 #endif
 
+#define MAXLINE 4096
+#define MIN_DF_BUFSIZ 576	 // Minimum reassembly buffer size 
+#define MAX_MTU 65535		 // MTU at least 68, max of 64KB 
+#define IPPROTO_BAD 143		 // IANA - 143-252 (0x8F-0xFC) UNASSIGNED 
+#define TCP_OPT_LEN 40		 // The maximum length of TCP options
+#define IP_OPT_LEN 40		 // The maximum length of IP options
+#define PROBE_IP_LEN 20		 // IP header length (not include any option)
+#define PROBE_TCP_LEN 20	 // TCP header length (not include any option)
+#define PROBE_UDP_LEN 8		 // UDP header length 
+#define PROBE_ICMP_LEN 8	 // ICMP header length 
+
 inline void safeFree(void *point)
 {
     if (point) free(point);
@@ -72,11 +85,17 @@ inline const char *nullToEmpty(const char *s)
     return (s ? s : "");
 }
     
+
 enum ErrType { SYS, MSG };
 
 class ProbeAddressInfo;
 class ProbeSock;
 class ProbePcap;
+class TcpProbeSock;
+class UdpProbeSock;
+class IcmpProbeSock;
+class ProbeException;
+
 
 class ProbeException : public std::exception {
 private:
@@ -90,7 +109,6 @@ public:
 };
 
 class ProbeAddressInfo {
-    friend class ProbeSock;
     friend std::ostream& operator<<(std::ostream&,
 				    const ProbeAddressInfo &);
 
@@ -99,12 +117,12 @@ private:
     sockaddr localAddr, foreignAddr;
     socklen_t localAddrLen, foreignAddrLen;
     std::string device;
-    short devMtu;
+    u_short devMtu;
 
     // the device information element
     struct deviceInfo {
         std::string name;               // interface name
-        short mtu;                      // interface MTU
+        u_short mtu;			// interface MTU
         short flags;                    // IFF_xxx constants from <net/if.h>
         struct sockaddr *addr;          // primary address
         struct sockaddr *brdaddr;       // broadcast address
@@ -125,7 +143,7 @@ public:
     
     ProbeAddressInfo(const char *foreignHost, const char *foreignService,
                      const char *localHost = NULL, int localPort = 0,
-                     const char *dev = NULL, short mtu = 0) throw(ProbeException);
+                     const char *dev = NULL, u_short mtu = 0) throw(ProbeException);
 
     sockaddr *getLocalSockaddr() {
         return &localAddr;
@@ -179,8 +197,6 @@ inline std::ostream& operator<<(std::ostream &output,
 }
 
 class ProbePcap {
-    friend class ProbeSock;
-
 private:
     pcap_t *handle;
     int linkType;
@@ -195,25 +211,93 @@ public:
     char *nextPcap(int *len);
 };
 
-#if 0
 class ProbeSock {
 public:
-    virtual ~ProbeSock();
-    virtual ProbeSock(int protocol);
-    // virtual sendPacket();
-    // virtual buildHeader();
-    // virtual fragPacket();
+    static int openSock(const int protocol) throw(ProbeException);
+    virtual ~ProbeSock() { close(rawfd); }
+    ProbeSock(const int proto, u_short mtu,
+              uint16_t id = (u_short)time(0) & 0xffff,
+              int len = 0, u_char *buf = NULL):
+	protocol(proto), rawfd(openSock(proto)), pmtu(mtu), ipid(id),
+        ipoptLen(len), iphdrLen(PROBE_IP_LEN) {
+        assert(len >= 0);
+        if (len) {
+            if (!buf) {
+                //  Default IP timestamp option, only used to implement *BAD* IP length
+                u_char *p = ipopt;
+                *p++ = 0x44;             // IP timestamp option
+                *p++ = 40;		 // *BAD* length of option
+                *p++ = 5;		 // the pointer to the entry
+                *p++ = 0;		 // record only timestamps
+                ipoptLen = 4;
+            } else {
+                memcpy(ipopt, buf, len);
+            }
+            iphdrLen += ipoptLen;
+        }
+    }
+
+    // virtual int sendPacket() throw(ProbeException);
+    // virtual sendFragPacket();
+    virtual int buildIpHeader(u_char *buf, int protoLen, struct in_addr src, struct in_addr dst,
+			      u_char ttl, u_short flagFrag) throw(ProbeException);
+
+    // virtual buildProtocolHeader(u_char *buf, int protoLen) = 0;
+    // virtual int buildProtocolPacket(int, ) = 0;
+    // virtual recvProtocolPacket() = 0;
     // int recvIcmp(char *buf, int len);
-    static uint16_t checksum(uint16_t * addr, int len);
-    static int do_checksum(u_char *buf, int protocol, int len);
 
 protected:
+    const int protocol;
     int rawfd;
-    int pmtu;
-    int packLen;
+    u_short pmtu;
+    uint16_t ipid;
+    u_char ipopt[IP_OPT_LEN];
+    int ipoptLen;
+    int iphdrLen;
+    // struct sockaddr saDest;
+    // int packLen;
     // ProbeAddress probeAddress;
-}
-#endif
+};
 
+class TcpProbeSock: public ProbeSock {
+public:
+    TcpProbeSock(u_short mtu, uint16_t id, int port, struct in_addr src, struct in_addr dst,
+		 int len = 0, u_char *buf = NULL):
+	ProbeSock(IPPROTO_TCP, mtu, id), srcAddr(src), dstAddr(dst),
+	tcpoptLen(len), tcphdrLen(PROBE_TCP_LEN) {
+        if (len) {
+            if (!buf) {
+                u_char *p = tcpopt;
+                *p++ = 2;		 // TCP mss option
+                *p++ = 4;		 // option len
+
+                // MSS don't need to subtract the length of MSS option itself, but should
+                // subtract the IP options and other length of TCP options (e.g. TCP
+                // timestamps options)
+                u_short mss = pmtu - iphdrLen - PROBE_TCP_LEN; 
+                assert(mss > 0);
+                *(u_short *)p= htons(mss);
+                tcpoptLen = 4;
+            } else {
+                memcpy(tcpopt, buf, len);
+            }
+            tcphdrLen += len;
+        }
+    }
+	
+    int buildIpHeader(u_char *buf, int protoLen, struct in_addr src, struct in_addr dst,
+		      u_char ttl, u_short flagFrag = IP_DF) throw(ProbeException);
+
+    int buildProtocolHeader(u_char *buf, int protoLen, u_short sport, u_short dport);
+private:
+    struct in_addr srcAddr, dstAddr;
+    u_char tcpopt[TCP_OPT_LEN];
+    int tcpoptLen;
+    int tcphdrLen;
+};
+
+
+int do_checksum(u_char *buf, int protocol, int len) throw(ProbeException);
 #endif
 
