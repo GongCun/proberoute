@@ -4,15 +4,13 @@
 void ProbeAddressInfo::getDeviceInfo() throw(ProbeException)
 {
     int sockfd;
-    int lastlen, len;
-    short flags, mtu;
+    int lastlen, len, flags;
     struct ifconf ifc;
     struct ifreq *ifr, ifrcopy;
     struct sockaddr_in *sinptr;
-    struct sockaddr *addr, *brdaddr, *netmask;
     char *buf, *ptr;
     char *cptr;
-    std::string name;
+    struct deviceInfo *deviceInfoPtr, **deviceInfoNext;
 
     if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0)
         throw ProbeException("socket error");
@@ -43,6 +41,9 @@ void ProbeAddressInfo::getDeviceInfo() throw(ProbeException)
         len += 10 * sizeof(struct ifreq);    // increment
         free(buf);
     }
+
+    deviceInfoList = NULL;
+    deviceInfoNext = &deviceInfoList;
 
     for (ptr = buf; ptr < buf + ifc.ifc_len; ) {
 	ifr = (struct ifreq *)ptr;
@@ -78,108 +79,114 @@ void ProbeAddressInfo::getDeviceInfo() throw(ProbeException)
 	if (((flags = ifrcopy.ifr_flags) & IFF_UP) == 0)
 	    continue;			     // ignore if interface not up
 
-	// deviceInfoPtr->flags = flags;	     // IFF_xxx values
+        deviceInfoPtr = new deviceInfo;
+        *deviceInfoNext = deviceInfoPtr;       // prev points to this new one
+        deviceInfoNext = &deviceInfoPtr->next; // points to next one goes here
+        
+	deviceInfoPtr->flags = flags;	     // IFF_xxx values
 
 #if defined(SIOCGIFMTU) && defined(HAVE_STRUCT_IFREQ_IFR_MTU)
 	if (ioctl(sockfd, SIOCGIFMTU, &ifrcopy) < 0)
 	    throw ProbeException("ioctl SIOCGIFMTU");
-	mtu = ifrcopy.ifr_mtu;
-#else
-	mtu = 0;
+	deviceInfoPtr->mtu = ifrcopy.ifr_mtu;
 #endif
 
-        name = ifr->ifr_name;
+        deviceInfoPtr->name = ifr->ifr_name;
 	
 	assert(ifr->ifr_addr.sa_family == AF_INET);
 
 	sinptr = (struct sockaddr_in *)&ifr->ifr_addr;
-	addr = (struct sockaddr *)calloc(1, sizeof(struct sockaddr_in));
-        // std::printf("addr: %p\n", addr);
-	if (!addr)
-	    throw ProbeException("calloc");
-	memcpy(addr, sinptr, sizeof(struct sockaddr_in));
+	deviceInfoPtr->addr = (struct sockaddr *)calloc(1, sizeof(struct sockaddr_in));
+	if (!deviceInfoPtr->addr) throw ProbeException("calloc");
+	memcpy(deviceInfoPtr->addr, sinptr, sizeof(struct sockaddr_in));
 
 #ifdef SIOCGIFBRDADDR
 	if (flags & IFF_BROADCAST) {
 	    if (ioctl(sockfd, SIOCGIFBRDADDR, &ifrcopy) < 0)
 		throw ProbeException("ioctl SIOCGIFBRDADDR");
 	    sinptr = (struct sockaddr_in *)&ifrcopy.ifr_broadaddr;
-	    brdaddr = (struct sockaddr *)calloc(1, sizeof(struct sockaddr_in));
-	    if (!brdaddr)
-		throw ProbeException("calloc");
-	    memcpy(brdaddr, sinptr, sizeof(struct sockaddr_in));
+	    deviceInfoPtr->brdaddr = (struct sockaddr *)calloc(1, sizeof(struct sockaddr_in));
+	    if (!deviceInfoPtr->brdaddr) throw ProbeException("calloc");
+	    memcpy(deviceInfoPtr->brdaddr, sinptr, sizeof(struct sockaddr_in));
 	}
-#else
-	brdaddr = (struct sockaddr *)NULL;
 #endif
 
 #ifdef SIOCGIFNETMASK
 	if (ioctl(sockfd, SIOCGIFNETMASK, &ifrcopy) < 0)
 	    throw ProbeException("ioctl SIOCGIFNETMASK");
 	sinptr = (struct sockaddr_in *)&ifrcopy.ifr_addr;
-	netmask = (struct sockaddr *)calloc(1, sizeof(struct sockaddr_in));
-	if (!netmask)
-	    throw ProbeException("calloc");
-	memcpy(netmask, sinptr, sizeof(struct sockaddr_in));
-#else
-	netmask = (struct sockaddr *)NULL;
+	deviceInfoPtr->netmask = (struct sockaddr *)calloc(1, sizeof(struct sockaddr_in));
+	if (!deviceInfoPtr->netmask) throw ProbeException("calloc");
+	memcpy(deviceInfoPtr->netmask, sinptr, sizeof(struct sockaddr_in));
 #endif
 
-	// insert the device information to the list
-	deviceInfoList.push_back(deviceInfo(name,
-                                            mtu,
-                                            flags,
-                                            addr,
-                                            brdaddr,
-                                            netmask));
     }
-    
+    close(sockfd);
+    free(buf);
 }
 
 void ProbeAddressInfo::printDeviceInfo()
 {
     struct sockaddr_in *sinptr;
+    struct deviceInfo *deviceInfoPtr;
 
-    for (std::list<deviceInfo>::iterator it = deviceInfoList.begin();
-	 it != deviceInfoList.end(); ++it) {
-	std::cout << it->name << ": ";
+    for (deviceInfoPtr = deviceInfoList; deviceInfoPtr;
+         deviceInfoPtr = deviceInfoPtr->next) {
 
-	sinptr = (struct sockaddr_in *)it->addr;
+	std::cout << deviceInfoPtr->name << ": ";
+
+	sinptr = (struct sockaddr_in *)deviceInfoPtr->addr;
 	std::cout << "inet " << inet_ntoa(sinptr->sin_addr) << ' ';
 
-	if (it->netmask) {
-	    sinptr = (struct sockaddr_in *)it->netmask;
+	if (deviceInfoPtr->netmask) {
+	    sinptr = (struct sockaddr_in *)deviceInfoPtr->netmask;
 	    std::cout << "netmask " << inet_ntoa(sinptr->sin_addr) << ' ';
 	}
 
-	if (it->brdaddr) {
-	    sinptr = (struct sockaddr_in *)it->brdaddr;
+	if (deviceInfoPtr->brdaddr) {
+	    sinptr = (struct sockaddr_in *)deviceInfoPtr->brdaddr;
 	    std::cout << "broadcast " << inet_ntoa(sinptr->sin_addr) << ' ';
 	}
 
-	std::cout << "mtu " << it->mtu << std::endl;
+        std::cout << "mtu " << deviceInfoPtr->mtu << std::endl;
     }
 
 }
 
-void ProbeAddressInfo::clearDeviceInfo()
+void ProbeAddressInfo::freeDeviceInfo()
 {
-    for (std::list<deviceInfo>::iterator it = deviceInfoList.begin();
-	 it != deviceInfoList.end(); ++it) {
-	safeFree(it->addr); safeFree(it->brdaddr); safeFree(it->netmask);
+    struct deviceInfo **p, *pnext;
+    int i = 0;
+    struct sockaddr_in *ptr;
+
+    for (p = &deviceInfoList; *p; ) {
+	ptr = (struct sockaddr_in *)(*p)->addr;
+	std::cout << inet_ntoa(ptr->sin_addr) << std::endl;
+	std::printf("*p = %p, deviceInfoList = %p\n", *p, deviceInfoList);
+
+        // safeFree((*p)->addr); safeFree((*p)->brdaddr); safeFree((*p)->netmask);
+        pnext = (*p)->next;	// can't fetch pnext after delete
+        delete *p;		// the p{} itself
+	// *p = (struct deviceInfo *)NULL;
+	// std::printf("*p = %p, deviceInfoList = %p\n", *p, deviceInfoList);
+	p = &pnext;
+	std::printf("*p = %p, deviceInfoList = %p\n", *p, deviceInfoList);
     }
 
-    deviceInfoList.clear();
+    // deviceInfoList = NULL;
+
 }
 
 ProbeAddressInfo::ProbeAddressInfo(const char *foreignHost, const char *foreignService,
                                    const char *localHost, int localPort,
-                                   const char *dev, int mtu) throw(ProbeException)
-    // : device(dev), devMtu(mtu)
+                                   const char *dev, short mtu) throw(ProbeException)
+    : device(nullToEmpty(dev)), devMtu(mtu)
 {
     struct addrinfo hints, *res, *curr;
     struct sockaddr_in *paddr;
+    int sockfd;
     int n;
+    bool exist = false;
 
     bzero(&hints, sizeof(struct addrinfo));
 
@@ -226,21 +233,26 @@ ProbeAddressInfo::ProbeAddressInfo(const char *foreignHost, const char *foreignS
     // anyway, we define the local port ourselves
     paddr->sin_port = htons(localPort);
 
+    close(sockfd);
+
 #if 0
     // fetch the device name or mtu size by the IP address
     getDeviceInfo();
-    int exist = 0;
+    // if (!device.empty()) std::cout << "device: " << device << std::endl;
+    
     for (std::list<deviceInfo>::iterator it = deviceInfoList.begin();
 	 it != deviceInfoList.end(); ++it) {
-	if (dev && device == it->name) exist = 1;
+	if (!device.empty() && device == it->name) exist = true;
 
 	if (((struct sockaddr_in *)it->addr)->sin_addr.s_addr ==
 	    ((struct sockaddr_in *)&localAddr)->sin_addr.s_addr) {
-	    if (!dev) device = it->name;
-	    if (!mtu) devMtu = it->mtu;
+	    if (device.empty()) {
+                device = it->name; exist = true;
+            }
+	    if (!devMtu) devMtu = it->mtu;
 	}
     }
-    clearDeviceInfo();
+    freeDeviceInfo();
     if (!exist)
 	throw ProbeException("device not exist");
 #endif
