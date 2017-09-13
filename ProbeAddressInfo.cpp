@@ -155,27 +155,18 @@ void ProbeAddressInfo::printDeviceInfo()
 
 void ProbeAddressInfo::freeDeviceInfo()
 {
-    struct deviceInfo **p, *pnext;
-    int i = 0;
-    struct sockaddr_in *ptr;
+    struct deviceInfo *p, *pnext;
+    // struct sockaddr_in *ptr;
 
-    for (p = &deviceInfoList; *p; p = pnext) {
-	ptr = (struct sockaddr_in *)p->addr;
-	std::cout << inet_ntoa(ptr->sin_addr) << std::endl;
-	std::printf("p = %p, deviceInfoList = %p\n", p);
-
-        // safeFree((*p)->addr); safeFree((*p)->brdaddr); safeFree((*p)->netmask);
+    for (p = deviceInfoList; p; p = pnext) {
+	// ptr = (struct sockaddr_in *)p->addr;
+	// std::cout << inet_ntoa(ptr->sin_addr) << std::endl;
+	
         pnext = p->next;	// can't fetch pnext after delete
         delete p;		// the p{} itself
-	// p = NULL;
-	// *p = (struct deviceInfo *)NULL;
-	// std::printf("*p = %p, deviceInfoList = %p\n", *p, deviceInfoList);
-	// p = &pnext;
-	// std::printf("*p = %p, deviceInfoList = %p\n", *p, deviceInfoList);
     }
 
-    // deviceInfoList = NULL;
-
+    deviceInfoList = NULL;	// avoid double printDeviceInfo()
 }
 
 ProbeAddressInfo::ProbeAddressInfo(const char *foreignHost, const char *foreignService,
@@ -195,6 +186,8 @@ ProbeAddressInfo::ProbeAddressInfo(const char *foreignHost, const char *foreignS
     hints.ai_family = AF_INET;
     hints.ai_socktype = 0;
 
+    // std::cout << "foreignService = " << foreignService << std::endl;
+
     if ((n = getaddrinfo(foreignHost, foreignService, &hints, &res)) != 0)
         throw ProbeException("getaddrinfo error", gai_strerror(n));
 
@@ -208,13 +201,17 @@ ProbeAddressInfo::ProbeAddressInfo(const char *foreignHost, const char *foreignS
 	    if (connect(sockfd, curr->ai_addr, curr->ai_addrlen) < 0) {
 		close(sockfd);
 		sockfd = -1;
-	    }
+	    } else
+		break;
 	}
 
     if (sockfd < 0) {
 	freeaddrinfo(res);
 	throw ProbeException("Unable to connect by UDP");
     }
+
+    // paddr = (struct sockaddr_in *)curr->ai_addr;
+    // std::cout << "foreignAddr: " << inet_ntoa(paddr->sin_addr) << std::endl;
 
     foreignAddrLen = curr->ai_addrlen;
     memcpy(&foreignAddr, curr->ai_addr, foreignAddrLen);
@@ -236,27 +233,23 @@ ProbeAddressInfo::ProbeAddressInfo(const char *foreignHost, const char *foreignS
 
     close(sockfd);
 
-#if 0
     // fetch the device name or mtu size by the IP address
     getDeviceInfo();
-    // if (!device.empty()) std::cout << "device: " << device << std::endl;
     
-    for (std::list<deviceInfo>::iterator it = deviceInfoList.begin();
-	 it != deviceInfoList.end(); ++it) {
-	if (!device.empty() && device == it->name) exist = true;
+    for (struct deviceInfo *p = deviceInfoList; p; p = p->next) {
+	if (!device.empty() && device == p->name) exist = true;
 
-	if (((struct sockaddr_in *)it->addr)->sin_addr.s_addr ==
+	if (((struct sockaddr_in *)p->addr)->sin_addr.s_addr ==
 	    ((struct sockaddr_in *)&localAddr)->sin_addr.s_addr) {
 	    if (device.empty()) {
-                device = it->name; exist = true;
+                device = p->name; exist = true;
             }
-	    if (!devMtu) devMtu = it->mtu;
+	    if (!devMtu) devMtu = p->mtu;
 	}
     }
     freeDeviceInfo();
     if (!exist)
 	throw ProbeException("device not exist");
-#endif
 
 }
 
