@@ -171,7 +171,7 @@ void ProbeAddressInfo::freeDeviceInfo()
 
 ProbeAddressInfo::ProbeAddressInfo(const char *foreignHost, const char *foreignService,
                                    const char *localHost, int localPort,
-                                   const char *dev, short mtu) throw(ProbeException)
+                                   const char *dev, u_short mtu) throw(ProbeException)
     : device(nullToEmpty(dev)), devMtu(mtu)
 {
     struct addrinfo hints, *res, *curr;
@@ -228,8 +228,9 @@ ProbeAddressInfo::ProbeAddressInfo(const char *foreignHost, const char *foreignS
             throw ProbeException("inet_pton error");
     }
 
-    // anyway, we define the local port ourselves
-    paddr->sin_port = htons(localPort);
+    // specify the local port
+    if (localPort)
+	paddr->sin_port = htons(localPort);
 
     close(sockfd);
 
