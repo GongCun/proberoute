@@ -135,7 +135,9 @@ int TcpProbeSock::buildProtocolHeader(u_char *buf, int protoLen, u_short sport, 
 	sum = in_checksum((uint16_t *)&srcAddr, 4);
 	sum += in_checksum((uint16_t *)&dstAddr, 4);
 	sum += ntohs(IPPROTO_TCP + protoLen);
+	sum += in_checksum((uint16_t *)tcp, protoLen);
         tcp->th_sum = CKSUM_CARRY(sum);
+	std::printf("tcp->th_sum = 0x%04x\n", ntohs(tcp->th_sum));
     }
 
     return tcphdrLen;
