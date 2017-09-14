@@ -268,8 +268,8 @@ public:
     int sendPacket(const void *, size_t, int, const struct sockaddr *, socklen_t) throw(ProbeException);
     int buildIpHeader(u_char *buf, int protoLen, u_char ttl, u_short flagFrag);
 
-    virtual void buildProtocolHeader() {}
-    virtual void buildProtocolPacket() {}
+    virtual void buildProtocolHeader() = 0;
+    virtual void buildProtocolPacket() = 0;
 
     int getIphdrLen() {
 	return iphdrLen;
@@ -319,6 +319,9 @@ public:
         }
     }
 	
+    void buildProtocolHeader() {}
+    void buildProtocolPacket() {}
+
     int buildProtocolHeader(u_char *buf, int protoLen, u_short sport, u_short dport,
                             uint32_t seq, uint32_t ack, u_char flags = TH_SYN, bool badsum = false);
 
