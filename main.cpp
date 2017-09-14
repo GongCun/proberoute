@@ -43,7 +43,8 @@ int main(int argc, char *argv[])
 
 	std::cout << probeSock << std::endl;
 
-	probeSock.sendPacket(buf, len, 0, addressInfo.getForeignSockaddr(), addressInfo.getForeignSockaddrLen());
+	probeSock.sendPacket(buf, len, 0, addressInfo.getForeignSockaddr(),
+                             addressInfo.getForeignSockaddrLen());
 	// probeSock.buildProtocolPacket(buf, mtu,
 
         // addressInfo.getDeviceInfo();

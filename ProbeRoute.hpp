@@ -240,7 +240,6 @@ class ProbeSock {
 				    const ProbeSock&);
 public:
     static int openSock(const int protocol) throw(ProbeException);
-    virtual std::ostream& print(std::ostream &output) const = 0;
     virtual ~ProbeSock() { close(rawfd); }
     ProbeSock(const int proto, u_short mtu,
 	      struct in_addr src, struct in_addr dst,
@@ -283,13 +282,15 @@ protected:
     int rawfd;
     u_short pmtu;
     uint16_t ipid;
+    struct in_addr srcAddr, dstAddr;
     u_char ipopt[IP_OPT_LEN];
     int ipoptLen;
     int iphdrLen;
-    struct in_addr srcAddr, dstAddr;
 };
 
 class TcpProbeSock: public ProbeSock {
+    friend std::ostream& operator<<(std::ostream& output,
+                                    const TcpProbeSock& probe);
 public:
     TcpProbeSock(u_short mtu, uint16_t id,
 		 struct in_addr src, struct in_addr dst,
@@ -336,35 +337,38 @@ private:
     int tcphdrLen;
 };
 
-inline std::ostream& operator<<(std::ostream& out,
+inline std::ostream& operator<<(std::ostream& output,
 				const ProbeSock& probe)
 {
-    return probe.print(out);
-}
+    output << "protocol: " << probe.protocol << std::endl;
+    output << "rawfd: " << probe.rawfd << std::endl;
+    output << "pmtu: " << probe.pmtu << std::endl;
+    output << "iphdrLen: " << probe.iphdrLen << std::endl;
+    std::printf("ipid: 0x%04x\n", htons(probe.ipid));
 
-inline std::ostream& TcpProbeSock::print(std::ostream &output) const
-{
-    int i;
-    std::cout << "protocol: " << protocol << std::endl;
-    std::cout << "rawfd: " << rawfd << std::endl;
-    std::cout << "pmtu: " << pmtu << std::endl;
-    std::cout << "iphdrLen: " << iphdrLen << std::endl;
-    std::printf("ipid: 0x%04x\n", htons(ipid));
-
-    std::cout << "ipopt: ";
-    for (i = 0; i < ipoptLen; i++)
-        std::printf("0x%02x%s", ipopt[i], i == ipoptLen - 1  ? "\n" : " ");
-    if (!ipoptLen) std::cout << "null" << std::endl;
-
-    std::cout << "tcphdrLen: " << tcphdrLen << std::endl;
-    std::cout << "tcpopt: ";
-    for (i = 0; i < tcpoptLen; i++)
-        std::printf("0x%02x%s", tcpopt[i], i == tcpoptLen - 1  ? "" : " ");
-    if (!tcpoptLen) std::cout << "null";
+    output << "ipopt: ";
+    // Should use boost::format or std::putf
+    for (int i = 0; i < probe.ipoptLen; i++)
+        std::printf("0x%02x%s", probe.ipopt[i], i == probe.ipoptLen - 1  ? "\n" : " ");
+    if (!probe.ipoptLen) output << "null"; 
 
     return output;
 }
 
+inline std::ostream& operator<<(std::ostream& output,
+				const TcpProbeSock& probe)
+{
+    output << (const ProbeSock &)probe << std::endl;
+    
+    output << "tcphdrLen: " << probe.tcphdrLen << std::endl;
+    output << "tcpopt: ";
+    // Should use boost::format or std::putf
+    for (int i = 0; i < probe.tcpoptLen; i++)
+        std::printf("0x%02x%s", probe.tcpopt[i], i == probe.tcpoptLen - 1  ? "" : " ");
+    if (!probe.tcpoptLen) output << "null";
+
+    return output;
+}
 
 #endif
 
