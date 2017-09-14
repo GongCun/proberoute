@@ -275,6 +275,10 @@ public:
 
     virtual void buildProtocolHeader() {}
     virtual void buildProtocolPacket() {}
+
+    int getIphdrLen() {
+	return iphdrLen;
+    }
     // virtual recvProtocolPacket() = 0;
     // int recvIcmp(char *buf, int len);
 
@@ -294,8 +298,8 @@ protected:
 class TcpProbeSock: public ProbeSock {
 public:
     TcpProbeSock(u_short mtu, uint16_t id, struct in_addr src, struct in_addr dst,
-		 int len = 0, u_char *buf = NULL):
-	ProbeSock(IPPROTO_TCP, mtu, id), srcAddr(src), dstAddr(dst),
+		 int iplen = 0, u_char *ipbuf = NULL, int len = 0, u_char *buf = NULL):
+	ProbeSock(IPPROTO_TCP, mtu, id, iplen, ipbuf), srcAddr(src), dstAddr(dst),
 	tcpoptLen(len), tcphdrLen(PROBE_TCP_LEN) {
         assert(len >= 0);
         if (len) {
@@ -326,6 +330,10 @@ public:
     int buildProtocolPacket(u_char *buf, int protoLen, struct in_addr src, struct in_addr dst,
 			    u_char ttl, u_short flagFrag, u_short sport, u_short dport,
 			    uint32_t seq, uint32_t ack);
+
+    int getTcphdrLen() {
+	return tcphdrLen;
+    }
 private:
     struct in_addr srcAddr, dstAddr;
     u_char tcpopt[TCP_OPT_LEN];
