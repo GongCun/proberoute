@@ -352,19 +352,15 @@ inline std::ostream& TcpProbeSock::print(std::ostream &output) const
     std::printf("ipid: 0x%04x\n", htons(ipid));
 
     std::cout << "ipopt: ";
-    if (ipoptLen) {
-	for (i = 0; i < ipoptLen; i++)
-	    std::printf("0x%02x%s", ipopt[i], i == ipoptLen - 1  ? "\n" : " ");
-    } else
-	std::cout << "null" << std::endl;
+    for (i = 0; i < ipoptLen; i++)
+        std::printf("0x%02x%s", ipopt[i], i == ipoptLen - 1  ? "\n" : " ");
+    if (!ipoptLen) std::cout << "null" << std::endl;
 
     std::cout << "tcphdrLen: " << tcphdrLen << std::endl;
     std::cout << "tcpopt: ";
-    if (tcpoptLen) {
-	for (i = 0; i < tcpoptLen; i++)
-	    std::printf("0x%02x%s", tcpopt[i], i == tcpoptLen - 1  ? "" : " ");
-    } else
-	std::cout << "null";
+    for (i = 0; i < tcpoptLen; i++)
+        std::printf("0x%02x%s", tcpopt[i], i == tcpoptLen - 1  ? "" : " ");
+    if (!tcpoptLen) std::cout << "null";
 
     return output;
 }
