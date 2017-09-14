@@ -85,10 +85,6 @@ inline const char *nullToEmpty(const char *s)
     return (s ? s : "");
 }
     
-// inline uint16_t CKSUM_CARRY(uint32_t x);
-// inline uint32_t in_checksum(uint16_t *addr, int len);
-// inline uint16_t checksum(uint16_t *addr, int len);
-
 inline uint16_t CKSUM_CARRY(uint32_t x) {
     return (x = (x >> 16) + (x & 0xffff), ~(x + (x >> 16)) & 0xffff);
 }
@@ -215,10 +211,10 @@ inline std::ostream& operator<<(std::ostream &output,
     faddr = (struct sockaddr_in *)&address.foreignAddr;
 
     output << "local: " << inet_ntoa(laddr->sin_addr) << ":" << ntohs(laddr->sin_port)
-           << '\n';
+           << std::endl;
     output << "foreign: " << inet_ntoa(faddr->sin_addr) << ":" << ntohs(faddr->sin_port)
-           << '\n';
-    output << "device: " << address.device << '\n';
+           << std::endl;
+    output << "device: " << address.device << std::endl;
     output << "mtu: " << address.devMtu;
 
     return output;
@@ -240,11 +236,11 @@ public:
 };
 
 class ProbeSock {
-    // friend std::ostream& operator<<(std::ostream&,
-				    // const ProbeSock&);
+    friend std::ostream& operator<<(std::ostream&,
+				    const ProbeSock&);
 public:
     static int openSock(const int protocol) throw(ProbeException);
-    // virtual std::ostream& print(std::ostream &output);
+    virtual std::ostream& print(std::ostream &output) const = 0;
     virtual ~ProbeSock() { close(rawfd); }
     ProbeSock(const int proto, u_short mtu,
 	      struct in_addr src, struct in_addr dst,
@@ -331,11 +327,47 @@ public:
     int getTcphdrLen() {
 	return tcphdrLen;
     }
+
+    std::ostream& print(std::ostream &output) const;
+
 private:
     u_char tcpopt[TCP_OPT_LEN];
     int tcpoptLen;
     int tcphdrLen;
 };
+
+inline std::ostream& operator<<(std::ostream& out,
+				const ProbeSock& probe)
+{
+    return probe.print(out);
+}
+
+inline std::ostream& TcpProbeSock::print(std::ostream &output) const
+{
+    int i;
+    std::cout << "protocol: " << protocol << std::endl;
+    std::cout << "rawfd: " << rawfd << std::endl;
+    std::cout << "pmtu: " << pmtu << std::endl;
+    std::cout << "iphdrLen: " << iphdrLen << std::endl;
+    std::printf("ipid: 0x%04x\n", htons(ipid));
+
+    std::cout << "ipopt: ";
+    if (ipoptLen) {
+	for (i = 0; i < ipoptLen; i++)
+	    std::printf("0x%02x%s", ipopt[i], i == ipoptLen - 1  ? "\n" : " ");
+    } else
+	std::cout << "null" << std::endl;
+
+    std::cout << "tcphdrLen: " << tcphdrLen << std::endl;
+    std::cout << "tcpopt: ";
+    if (tcpoptLen) {
+	for (i = 0; i < tcpoptLen; i++)
+	    std::printf("0x%02x%s", tcpopt[i], i == tcpoptLen - 1  ? "" : " ");
+    } else
+	std::cout << "null";
+
+    return output;
+}
 
 
 #endif

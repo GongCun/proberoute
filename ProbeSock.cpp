@@ -137,7 +137,9 @@ int TcpProbeSock::buildProtocolHeader(u_char *buf, int protoLen, u_short sport, 
 	sum += ntohs(IPPROTO_TCP + protoLen);
 	sum += in_checksum((uint16_t *)tcp, protoLen);
         tcp->th_sum = CKSUM_CARRY(sum);
+#ifdef _DEBUG
 	std::printf("tcp->th_sum = 0x%04x\n", ntohs(tcp->th_sum));
+#endif
     }
 
     return tcphdrLen;
@@ -156,3 +158,5 @@ int TcpProbeSock::buildProtocolPacket(u_char *buf, int protoLen, u_char ttl, u_s
 
     return iphdrLen + protoLen;	// total packet length
 }
+
+    

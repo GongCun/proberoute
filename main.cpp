@@ -41,6 +41,8 @@ int main(int argc, char *argv[])
 
 	std::cout << "total len = " << len << std::endl;
 
+	std::cout << probeSock << std::endl;
+
 	probeSock.sendPacket(buf, len, 0, addressInfo.getForeignSockaddr(), addressInfo.getForeignSockaddrLen());
 	// probeSock.buildProtocolPacket(buf, mtu,
 
