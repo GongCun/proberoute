@@ -40,14 +40,14 @@ int ProbeSock::openSock(const int protocol) throw(ProbeException)
 
 
 int ProbeSock::buildIpHeader(u_char *buf, int protoLen, struct in_addr src, struct in_addr dst,
-                             u_char ttl, u_short flagFrag) throw(ProbeException)
+                             u_char ttl, u_short flagFrag)
 // protoLen = protocol header length + payload length
 {
     struct ip *ip;
 
     bzero(buf, iphdrLen);
-
     ip = (struct ip *)buf;
+
     ip->ip_hl = iphdrLen >> 2;
     ip->ip_v = 4;
     ip->ip_tos = 0;
@@ -80,11 +80,64 @@ int ProbeSock::buildIpHeader(u_char *buf, int protoLen, struct in_addr src, stru
     }
 
     ip->ip_sum = 0;
-    if (do_checksum(buf, IPPROTO_IP, 0) < 0)
-        throw ProbeException("do_checksum IPPROTO_IP");
+    ip->ip_sum = checksum((uint16_t *)buf, iphdrLen);
 
     return iphdrLen;
 
 }
 
 	
+int TcpProbeSock::buildProtocolHeader(u_char *buf, int protoLen, u_short sport, u_short dport,
+				      uint32_t seq, uint32_t ack, u_char flags, bool badsum)
+{
+    struct tcphdr *tcp;
+    u_char *p;
+    uint32_t sum = 0;
+
+    bzero(buf, tcphdrLen);
+    tcp = (struct tcphdr *)buf;
+
+    tcp->th_sport = htons(sport);
+    tcp->th_dport = htons(dport);
+    tcp->th_seq = htonl(seq);
+    tcp->th_ack = htonl(ack);
+    tcp->th_x2 = 0;
+    tcp->th_off = tcphdrLen >> 2;
+    tcp->th_flags = flags;
+    tcp->th_urp = 0;              // urgent pointer
+    tcp->th_win = htons(MAX_MTU); // default 65535
+    tcp->th_sum = 0;              // calculate later
+
+    if (tcphdrLen > PROBE_TCP_LEN) {
+        assert(tcphdrLen - PROBE_TCP_LEN == tcpoptLen);
+        p = buf + PROBE_TCP_LEN;
+        memcpy(p, tcpopt, tcpoptLen);
+    }
+    
+    if (badsum) {
+        srand(time(0));
+        tcp->th_sum = rand() & 0xffff;
+    } else {
+	sum = in_checksum((uint16_t *)&srcAddr, 4);
+	sum += in_checksum((uint16_t *)&dstAddr, 4);
+	sum += ntohs(IPPROTO_TCP + protoLen);
+        tcp->th_sum = CKSUM_CARRY(sum);
+    }
+
+    return tcphdrLen;
+}
+
+int TcpProbeSock::buildProtocolPacket(u_char *buf, int protoLen, struct in_addr src, struct in_addr dst,
+				      u_char ttl, u_short flagFrag, u_short sport, u_short dport,
+				      uint32_t seq, uint32_t ack)
+{
+    int iplen, tcplen;
+
+    iplen = buildIpHeader(buf, protoLen, src, dst, ttl, flagFrag);
+    assert(iplen == iphdrLen);
+	
+    tcplen = buildProtocolHeader(buf + iplen, protoLen, sport, dport, seq, ack);
+    assert(tcplen == tcphdrLen);
+
+    return iphdrLen + protoLen;	// total packet length
+}

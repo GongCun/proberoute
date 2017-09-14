@@ -85,6 +85,34 @@ inline const char *nullToEmpty(const char *s)
     return (s ? s : "");
 }
     
+// inline uint16_t CKSUM_CARRY(uint32_t x);
+// inline uint32_t in_checksum(uint16_t *addr, int len);
+// inline uint16_t checksum(uint16_t *addr, int len);
+
+inline uint16_t CKSUM_CARRY(uint32_t x) {
+    return (x = (x >> 16) + (x & 0xffff), ~(x + (x >> 16)) & 0xffff);
+}
+
+inline uint32_t in_checksum(uint16_t *addr, int len)
+{
+    uint32_t sum = 0;
+
+    while (len > 1) {
+        sum += *addr++;
+        len -= 2;
+    }
+
+    if (len == 1)
+        sum += *(uint16_t *)addr;
+
+    return sum;
+}
+
+inline uint16_t checksum(uint16_t *addr, int len)
+{
+    return CKSUM_CARRY(in_checksum(addr, len));
+}
+
 
 enum ErrType { SYS, MSG };
 
@@ -212,8 +240,11 @@ public:
 };
 
 class ProbeSock {
+    // friend std::ostream& operator<<(std::ostream&,
+				    // const ProbeSock&);
 public:
     static int openSock(const int protocol) throw(ProbeException);
+    // virtual std::ostream& print(std::ostream &output);
     virtual ~ProbeSock() { close(rawfd); }
     ProbeSock(const int proto, u_short mtu,
               uint16_t id = (u_short)time(0) & 0xffff,
@@ -239,11 +270,11 @@ public:
 
     // virtual int sendPacket() throw(ProbeException);
     // virtual sendFragPacket();
-    virtual int buildIpHeader(u_char *buf, int protoLen, struct in_addr src, struct in_addr dst,
-			      u_char ttl, u_short flagFrag) throw(ProbeException);
+    int buildIpHeader(u_char *buf, int protoLen, struct in_addr src, struct in_addr dst,
+                      u_char ttl, u_short flagFrag);
 
-    // virtual buildProtocolHeader(u_char *buf, int protoLen) = 0;
-    // virtual int buildProtocolPacket(int, ) = 0;
+    virtual void buildProtocolHeader() {}
+    virtual void buildProtocolPacket() {}
     // virtual recvProtocolPacket() = 0;
     // int recvIcmp(char *buf, int len);
 
@@ -262,10 +293,11 @@ protected:
 
 class TcpProbeSock: public ProbeSock {
 public:
-    TcpProbeSock(u_short mtu, uint16_t id, int port, struct in_addr src, struct in_addr dst,
+    TcpProbeSock(u_short mtu, uint16_t id, struct in_addr src, struct in_addr dst,
 		 int len = 0, u_char *buf = NULL):
 	ProbeSock(IPPROTO_TCP, mtu, id), srcAddr(src), dstAddr(dst),
 	tcpoptLen(len), tcphdrLen(PROBE_TCP_LEN) {
+        assert(len >= 0);
         if (len) {
             if (!buf) {
                 u_char *p = tcpopt;
@@ -282,14 +314,18 @@ public:
             } else {
                 memcpy(tcpopt, buf, len);
             }
-            tcphdrLen += len;
+            tcphdrLen += tcpoptLen;
         }
     }
 	
-    int buildIpHeader(u_char *buf, int protoLen, struct in_addr src, struct in_addr dst,
-		      u_char ttl, u_short flagFrag = IP_DF) throw(ProbeException);
+    // using ProbeSock::buildProtocolHeader;
+    int buildProtocolHeader(u_char *buf, int protoLen, u_short sport, u_short dport,
+                            uint32_t seq, uint32_t ack, u_char flags = TH_SYN, bool badsum = false);
 
-    int buildProtocolHeader(u_char *buf, int protoLen, u_short sport, u_short dport);
+    // using ProbeSock::buildProtocolPacket;
+    int buildProtocolPacket(u_char *buf, int protoLen, struct in_addr src, struct in_addr dst,
+			    u_char ttl, u_short flagFrag, u_short sport, u_short dport,
+			    uint32_t seq, uint32_t ack);
 private:
     struct in_addr srcAddr, dstAddr;
     u_char tcpopt[TCP_OPT_LEN];
@@ -298,6 +334,5 @@ private:
 };
 
 
-int do_checksum(u_char *buf, int protocol, int len) throw(ProbeException);
 #endif
 
