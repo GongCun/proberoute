@@ -52,7 +52,7 @@ int do_checksum(u_char *buf, int protocol, int len) throw(ProbeException)
         struct tcphdr *tcp = (struct tcphdr *)(buf + iplen);
         tcp->th_sum = 0;
         sum = in_checksum((uint16_t *)&ip->ip_src, 8);
-        sum += ntohs(IPPROTO_TCP+len);
+        sum += ntohs(IPPROTO_TCP + len);
         sum += in_checksum((uint16_t *)tcp, len);
         tcp->th_sum = CKSUM_CARRY(sum);
         break;
@@ -62,7 +62,7 @@ int do_checksum(u_char *buf, int protocol, int len) throw(ProbeException)
         struct udphdr *udp = (struct udphdr *)(buf + iplen);
         udp->uh_sum = 0;
         sum = in_checksum((uint16_t *)&ip->ip_src, 8);
-        sum += ntohs(IPPROTO_UDP+len);
+        sum += ntohs(IPPROTO_UDP + len);
         sum += in_checksum((uint16_t *)udp, len);
         udp->uh_sum = CKSUM_CARRY(sum);
         break;
