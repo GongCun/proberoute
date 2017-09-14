@@ -247,9 +247,11 @@ public:
     // virtual std::ostream& print(std::ostream &output);
     virtual ~ProbeSock() { close(rawfd); }
     ProbeSock(const int proto, u_short mtu,
+	      struct in_addr src, struct in_addr dst,
               uint16_t id = (u_short)time(0) & 0xffff,
               int len = 0, u_char *buf = NULL):
 	protocol(proto), rawfd(openSock(proto)), pmtu(mtu), ipid(id),
+	srcAddr(src), dstAddr(dst),
         ipoptLen(len), iphdrLen(PROBE_IP_LEN) {
         assert(len >= 0);
         if (len) {
@@ -268,10 +270,8 @@ public:
         }
     }
 
-    // virtual int sendPacket() throw(ProbeException);
-    // virtual sendFragPacket();
-    int buildIpHeader(u_char *buf, int protoLen, struct in_addr src, struct in_addr dst,
-                      u_char ttl, u_short flagFrag);
+    int sendPacket(const void *, size_t, int, const struct sockaddr *, socklen_t) throw(ProbeException);
+    int buildIpHeader(u_char *buf, int protoLen, u_char ttl, u_short flagFrag);
 
     virtual void buildProtocolHeader() {}
     virtual void buildProtocolPacket() {}
@@ -290,16 +290,16 @@ protected:
     u_char ipopt[IP_OPT_LEN];
     int ipoptLen;
     int iphdrLen;
-    // struct sockaddr saDest;
-    // int packLen;
-    // ProbeAddress probeAddress;
+    struct in_addr srcAddr, dstAddr;
 };
 
 class TcpProbeSock: public ProbeSock {
 public:
-    TcpProbeSock(u_short mtu, uint16_t id, struct in_addr src, struct in_addr dst,
-		 int iplen = 0, u_char *ipbuf = NULL, int len = 0, u_char *buf = NULL):
-	ProbeSock(IPPROTO_TCP, mtu, id, iplen, ipbuf), srcAddr(src), dstAddr(dst),
+    TcpProbeSock(u_short mtu, uint16_t id,
+		 struct in_addr src, struct in_addr dst,
+		 int iplen = 0, u_char *ipbuf = NULL,
+		 int len = 0, u_char *buf = NULL):
+	ProbeSock(IPPROTO_TCP, mtu, src, dst, id, iplen, ipbuf),
 	tcpoptLen(len), tcphdrLen(PROBE_TCP_LEN) {
         assert(len >= 0);
         if (len) {
@@ -322,20 +322,16 @@ public:
         }
     }
 	
-    // using ProbeSock::buildProtocolHeader;
     int buildProtocolHeader(u_char *buf, int protoLen, u_short sport, u_short dport,
                             uint32_t seq, uint32_t ack, u_char flags = TH_SYN, bool badsum = false);
 
-    // using ProbeSock::buildProtocolPacket;
-    int buildProtocolPacket(u_char *buf, int protoLen, struct in_addr src, struct in_addr dst,
-			    u_char ttl, u_short flagFrag, u_short sport, u_short dport,
-			    uint32_t seq, uint32_t ack);
+    int buildProtocolPacket(u_char *buf, int protoLen, u_char ttl, u_short flagFrag,
+			    u_short sport, u_short dport, uint32_t seq, uint32_t ack);
 
     int getTcphdrLen() {
 	return tcphdrLen;
     }
 private:
-    struct in_addr srcAddr, dstAddr;
     u_char tcpopt[TCP_OPT_LEN];
     int tcpoptLen;
     int tcphdrLen;

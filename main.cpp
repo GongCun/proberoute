@@ -16,14 +16,33 @@ int main(int argc, char *argv[])
 	int mtu;
 	struct in_addr src, dst;
 	struct sockaddr_in *sinptr;
+	int len, iplen, tcplen;
+	u_short sport, dport;
 
 	mtu = addressInfo.getDevMtu();
+
 	sinptr = (struct sockaddr_in *)addressInfo.getLocalSockaddr();
 	src = sinptr->sin_addr;
+	sport = ntohs(sinptr->sin_port);
+
 	sinptr = (struct sockaddr_in *)addressInfo.getForeignSockaddr();
 	dst = sinptr->sin_addr;
+	dport = ntohs(sinptr->sin_port);
 	
-	TcpProbeSock probeSock(mtu, 0, src, dst, 4);
+	TcpProbeSock probeSock(mtu, 0, src, dst, 0, NULL, 4);
+	iplen = probeSock.getIphdrLen();
+	tcplen = probeSock.getTcphdrLen();
+
+	std::cout << "iplen = " << iplen
+		  << " tcplen = " << tcplen << std::endl;
+
+	len = probeSock.buildProtocolPacket(buf, mtu - iplen, 255, IP_DF,
+					    sport, dport, 0, 0); 
+
+	std::cout << "total len = " << len << std::endl;
+
+	probeSock.sendPacket(buf, len, 0, addressInfo.getForeignSockaddr(), addressInfo.getForeignSockaddrLen());
+	// probeSock.buildProtocolPacket(buf, mtu,
 
         // addressInfo.getDeviceInfo();
         // addressInfo.printDeviceInfo();

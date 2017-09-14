@@ -39,11 +39,12 @@ int ProbeSock::openSock(const int protocol) throw(ProbeException)
 // }
 
 
-int ProbeSock::buildIpHeader(u_char *buf, int protoLen, struct in_addr src, struct in_addr dst,
-                             u_char ttl, u_short flagFrag)
+int ProbeSock::buildIpHeader(u_char *buf, int protoLen, u_char ttl, u_short flagFrag)
 // protoLen = protocol header length + payload length
 {
     struct ip *ip;
+
+    assert(protoLen >= 0);
 
     bzero(buf, iphdrLen);
     ip = (struct ip *)buf;
@@ -70,8 +71,8 @@ int ProbeSock::buildIpHeader(u_char *buf, int protoLen, struct in_addr src, stru
 
     ip->ip_ttl = ttl;
     ip->ip_p = protocol;
-    ip->ip_src.s_addr = src.s_addr;
-    ip->ip_dst.s_addr = dst.s_addr;
+    ip->ip_src.s_addr = srcAddr.s_addr;
+    ip->ip_dst.s_addr = dstAddr.s_addr;
 
     if (iphdrLen > PROBE_IP_LEN) {
         assert(iphdrLen - PROBE_IP_LEN == ipoptLen);
@@ -86,6 +87,18 @@ int ProbeSock::buildIpHeader(u_char *buf, int protoLen, struct in_addr src, stru
 
 }
 
+
+
+int ProbeSock::sendPacket(const void *buf, size_t bufLen, int flags, const struct sockaddr *to, socklen_t toLegn)
+    throw(ProbeException)
+{
+    int len;
+    if ((len = sendto(rawfd, buf, bufLen, flags, to, toLegn)) != bufLen)
+	throw ProbeException("sendto error");
+
+    return len;
+}
+
 	
 int TcpProbeSock::buildProtocolHeader(u_char *buf, int protoLen, u_short sport, u_short dport,
 				      uint32_t seq, uint32_t ack, u_char flags, bool badsum)
@@ -94,6 +107,7 @@ int TcpProbeSock::buildProtocolHeader(u_char *buf, int protoLen, u_short sport, 
     u_char *p;
     uint32_t sum = 0;
 
+    assert(protoLen >= tcphdrLen);
     bzero(buf, tcphdrLen);
     tcp = (struct tcphdr *)buf;
 
@@ -127,13 +141,12 @@ int TcpProbeSock::buildProtocolHeader(u_char *buf, int protoLen, u_short sport, 
     return tcphdrLen;
 }
 
-int TcpProbeSock::buildProtocolPacket(u_char *buf, int protoLen, struct in_addr src, struct in_addr dst,
-				      u_char ttl, u_short flagFrag, u_short sport, u_short dport,
-				      uint32_t seq, uint32_t ack)
+int TcpProbeSock::buildProtocolPacket(u_char *buf, int protoLen, u_char ttl, u_short flagFrag,
+				      u_short sport, u_short dport, uint32_t seq, uint32_t ack)
 {
     int iplen, tcplen;
 
-    iplen = buildIpHeader(buf, protoLen, src, dst, ttl, flagFrag);
+    iplen = buildIpHeader(buf, protoLen, ttl, flagFrag);
     assert(iplen == iphdrLen);
 	
     tcplen = buildProtocolHeader(buf + iplen, protoLen, sport, dport, seq, ack);
