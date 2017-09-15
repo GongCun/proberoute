@@ -33,12 +33,6 @@ int ProbeSock::openSock(const int protocol) throw(ProbeException)
 }
 
 
-
-// ProbeSock::ProbeSock(const int protocol, ProbeAddressInfo &addrInfo):
-//     rawfd(openSock(protocol)), pmtu(addrInfo.getDevMtu()) {
-// }
-
-
 int ProbeSock::buildIpHeader(u_char *buf, int protoLen, u_char ttl, u_short flagFrag)
 // protoLen = protocol header length + payload length
 {
@@ -89,14 +83,52 @@ int ProbeSock::buildIpHeader(u_char *buf, int protoLen, u_char ttl, u_short flag
 
 
 
-int ProbeSock::sendPacket(const void *buf, size_t bufLen, int flags, const struct sockaddr *to, socklen_t toLegn)
+int ProbeSock::sendPacket(const void *buf, size_t buflen, int flags, const struct sockaddr *to, socklen_t tolen)
     throw(ProbeException)
 {
     int len;
-    if ((len = sendto(rawfd, buf, bufLen, flags, to, toLegn)) != bufLen)
+    if ((len = sendto(rawfd, buf, buflen, flags, to, tolen)) != buflen)
 	throw ProbeException("sendto error");
 
     return len;
+}
+
+int ProbeSock::sendFragPacket(const u_char *tcpbuf, const int packlen,
+			      const u_char ttl, const int fragsize,
+			      const struct sockaddr *to, socklen_t tolen) throw(ProbeException)
+{
+    u_char buf[MAX_MTU];
+    const u_char *ptr = tcpbuf;
+    int remlen = packlen, offset = 0, sendlen;
+    int iplen;
+    u_short flags;
+
+    if (fragsize % 8)
+        throw ProbeException("fragment size must be a multiple of 8");
+
+    while (remlen) {
+	sendlen = std::min(remlen, fragsize);
+        if (remlen <= fragsize) {
+            if (remlen == packlen) // if packlen <= fragment size, can't be split
+                flags = IP_DF;
+            else		   // exactly the last packet
+                flags = offset >> 3;
+        } else {
+            // if (remlen == packlen) // the first packet, no offset
+                // flags = IP_MF;
+            // else                   // neither the first nor the last packet
+                flags = (offset >> 3) | IP_MF;
+        }
+
+        iplen = buildIpHeader(buf, sendlen, ttl, flags);
+	memcpy(buf + iplen, ptr, sendlen);
+	sendPacket(buf, iplen + sendlen, 0, to, tolen);
+	offset += sendlen;
+	remlen -= sendlen;
+	ptr += sendlen;
+    }
+
+    return packlen;
 }
 
 	

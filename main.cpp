@@ -1,4 +1,5 @@
 #include "ProbeRoute.hpp"
+#include "assert.h"
 
 int main(int argc, char *argv[])
 {
@@ -16,7 +17,7 @@ int main(int argc, char *argv[])
 	int mtu;
 	struct in_addr src, dst;
 	struct sockaddr_in *sinptr;
-	int len, iplen, tcplen;
+	int iplen, packlen;
 	u_short sport, dport;
 
 	mtu = addressInfo.getDevMtu();
@@ -30,21 +31,24 @@ int main(int argc, char *argv[])
 	dport = ntohs(sinptr->sin_port);
 	
 	TcpProbeSock probeSock(mtu, 0, src, dst, 0, NULL, 4);
-	iplen = probeSock.getIphdrLen();
-	tcplen = probeSock.getTcphdrLen();
-
-	std::cout << "iplen = " << iplen
-		  << " tcplen = " << tcplen << std::endl;
-
-	len = probeSock.buildProtocolPacket(buf, mtu - iplen, 255, IP_DF,
-					    sport, dport, 0, 0); 
-
-	std::cout << "total len = " << len << std::endl;
-
 	std::cout << probeSock << std::endl;
 
-	probeSock.sendPacket(buf, len, 0, addressInfo.getForeignSockaddr(),
-                             addressInfo.getForeignSockaddrLen());
+	iplen = probeSock.getIphdrLen();
+	packlen = mtu - iplen;
+	std::cerr << "packlen = " << packlen << std::endl;
+	probeSock.buildProtocolHeader(buf, packlen, sport, dport); 
+	probeSock.sendFragPacket(buf, packlen, 255, 32,
+				 addressInfo.getForeignSockaddr(),
+				 addressInfo.getForeignSockaddrLen());
+
+	// len = probeSock.buildProtocolPacket(buf, mtu - iplen, 255, IP_DF,
+	// 				    sport, dport, 0, 0); 
+
+	// std::cout << "total len = " << len << std::endl;
+
+
+	// probeSock.sendPacket(buf, len, 0, addressInfo.getForeignSockaddr(),
+        //                      addressInfo.getForeignSockaddrLen());
 	// probeSock.buildProtocolPacket(buf, mtu,
 
         // addressInfo.getDeviceInfo();
