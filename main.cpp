@@ -30,13 +30,14 @@ int main(int argc, char *argv[])
 	dst = sinptr->sin_addr;
 	dport = ntohs(sinptr->sin_port);
 	
-	TcpProbeSock probeSock(mtu, 0, src, dst, 0, NULL, 4);
+	TcpProbeSock probeSock(mtu, src, dst, 0, NULL, 4);
 	std::cout << probeSock << std::endl;
 
 	iplen = probeSock.getIphdrLen();
 	packlen = mtu - iplen;
 	std::cerr << "packlen = " << packlen << std::endl;
-	probeSock.buildProtocolHeader(buf, packlen, sport, dport); 
+	// probeSock.buildProtocolHeader(buf, packlen, sport, dport, 0, 0, TH_ACK); 
+	probeSock.buildProtocolHeader(buf, packlen, sport, dport, 0, 0);
 	probeSock.sendFragPacket(buf, packlen, 255, 32,
 				 addressInfo.getForeignSockaddr(),
 				 addressInfo.getForeignSockaddrLen());

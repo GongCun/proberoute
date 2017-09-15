@@ -243,11 +243,11 @@ public:
     virtual ~ProbeSock() { close(rawfd); }
     ProbeSock(const int proto, u_short mtu,
 	      struct in_addr src, struct in_addr dst,
-              uint16_t id = (u_short)time(0) & 0xffff,
-              int len = 0, u_char *buf = NULL):
-	protocol(proto), rawfd(openSock(proto)), pmtu(mtu), ipid(id),
-	srcAddr(src), dstAddr(dst),
-        ipoptLen(len), iphdrLen(PROBE_IP_LEN) {
+              int len = 0, u_char *buf = NULL,
+              uint16_t id = (u_short)time(0) & 0xffff):
+	protocol(proto), rawfd(openSock(proto)), pmtu(mtu),
+	srcAddr(src), dstAddr(dst), ipoptLen(len),
+        iphdrLen(PROBE_IP_LEN), ipid(id) {
         assert(len >= 0);
         if (len) {
             if (!buf) {
@@ -285,22 +285,22 @@ protected:
     const int protocol;
     int rawfd;
     u_short pmtu;
-    uint16_t ipid;
     struct in_addr srcAddr, dstAddr;
     u_char ipopt[IP_OPT_LEN];
     int ipoptLen;
     int iphdrLen;
+    uint16_t ipid;
 };
 
 class TcpProbeSock: public ProbeSock {
     friend std::ostream& operator<<(std::ostream& output,
                                     const TcpProbeSock& probe);
 public:
-    TcpProbeSock(u_short mtu, uint16_t id,
-		 struct in_addr src, struct in_addr dst,
+    TcpProbeSock(u_short mtu, struct in_addr src, struct in_addr dst,
 		 int iplen = 0, u_char *ipbuf = NULL,
-		 int len = 0, u_char *buf = NULL):
-	ProbeSock(IPPROTO_TCP, mtu, src, dst, id, iplen, ipbuf),
+		 int len = 0, u_char *buf = NULL,
+		 uint16_t id = (u_short)time(0) & 0xffff):
+	ProbeSock(IPPROTO_TCP, mtu, src, dst, iplen, ipbuf, id),
 	tcpoptLen(len), tcphdrLen(PROBE_TCP_LEN) {
         assert(len >= 0);
         if (len) {

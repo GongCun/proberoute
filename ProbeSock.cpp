@@ -54,8 +54,10 @@ int ProbeSock::buildIpHeader(u_char *buf, int protoLen, u_char ttl, u_short flag
     ip->ip_len = iphdrLen + protoLen;
 #endif
 
-    // Don't change the value of ip_id
+    // Don't change the value of ip_id. If the ip_id is 0, system will arrange a
+    // random ID, so the fragment packet can't be reassembled.
     ip->ip_id = htons(ipid);
+    // std::cerr << "ip_id = " << ipid << std::endl;
 
 #ifdef _LINUX
     ip->ip_off = htons(flagFrag);
