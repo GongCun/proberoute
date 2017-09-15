@@ -266,6 +266,10 @@ public:
     }
 
     int sendPacket(const void *, size_t, int, const struct sockaddr *, socklen_t) throw(ProbeException);
+    int sendFragPacket(const u_char *tcpbuf, const int packlen,
+		       const u_char ttl, const int fragsize,
+		       const struct sockaddr *to, socklen_t tolen) throw(ProbeException);
+	
     int buildIpHeader(u_char *buf, int protoLen, u_char ttl, u_short flagFrag);
 
     virtual void buildProtocolHeader() = 0;
@@ -323,16 +327,15 @@ public:
     void buildProtocolPacket() {}
 
     int buildProtocolHeader(u_char *buf, int protoLen, u_short sport, u_short dport,
-                            uint32_t seq, uint32_t ack, u_char flags = TH_SYN, bool badsum = false);
+                            uint32_t seq = 0, uint32_t ack = 0, u_char flags = TH_SYN, bool badsum = false);
 
     int buildProtocolPacket(u_char *buf, int protoLen, u_char ttl, u_short flagFrag,
 			    u_short sport, u_short dport, uint32_t seq, uint32_t ack);
 
+
     int getTcphdrLen() {
 	return tcphdrLen;
     }
-
-    std::ostream& print(std::ostream &output) const;
 
 private:
     u_char tcpopt[TCP_OPT_LEN];
