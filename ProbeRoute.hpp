@@ -274,12 +274,11 @@ public:
 
     virtual void buildProtocolHeader() = 0;
     virtual void buildProtocolPacket() = 0;
+    int recvIcmp(u_char *buf, int len);
 
     int getIphdrLen() {
 	return iphdrLen;
     }
-    // virtual recvProtocolPacket() = 0;
-    // int recvIcmp(char *buf, int len);
 
 protected:
     const int protocol;
@@ -290,7 +289,15 @@ protected:
     int ipoptLen;
     int iphdrLen;
     uint16_t ipid;
-};
+
+#ifndef HAVE_ICMP_NEXTMTU
+    // Path MTU Discovery (RFC1191)
+    struct my_pmtu {
+	u_short ipm_void;
+	u_short ipm_nextmtu;
+    };
+#endif
+}; // class ProbeSock
 
 class TcpProbeSock: public ProbeSock {
     friend std::ostream& operator<<(std::ostream& output,
@@ -332,7 +339,12 @@ public:
     int buildProtocolPacket(u_char *buf, int protoLen, u_char ttl, u_short flagFrag,
 			    u_short sport, u_short dport, uint32_t seq, uint32_t ack);
 
+    int recvTcp(u_char *buf, int len,
+                uint32_t seq = 0, uint32_t ack = 0,
+                u_short sport = ntohs(srcAddr.sin_port),
+                u_short dport = ntohs(dstAddr.sin_port));
 
+    
     int getTcphdrLen() {
 	return tcphdrLen;
     }
@@ -341,7 +353,7 @@ private:
     u_char tcpopt[TCP_OPT_LEN];
     int tcpoptLen;
     int tcphdrLen;
-};
+}; // class TcpProbeSock
 
 inline std::ostream& operator<<(std::ostream& output,
 				const ProbeSock& probe)
