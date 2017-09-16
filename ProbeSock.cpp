@@ -193,4 +193,105 @@ int TcpProbeSock::buildProtocolPacket(u_char *buf, int protoLen, u_char ttl, u_s
     return iphdrLen + protoLen;	// total packet length
 }
 
+
+int ProbeSock::recvIcmp(u_char *buf, int len)
+{
+    //
+    // Return:
+    // 
+    //   -2 - ICMP_PARAMPROB
+    //   -1 - ICMP_TIMXCEED
+    //    0 - Packet too short or other
+    //   >0 - ICMP code + 1 (type = ICMP_UNREACH)
+    //   
+
+    const struct ip *ip, *origip;
+    const struct icmp *icmp;
+    u_char type, code;
+    int iplen, icmplen, origiplen;
+
+    ip = (struct ip *)buf;
+    iplen = ip->ip_hl << 2;
+    if (iplen < PROBE_IP_LEN || ip->ip_p != IPPROTO_ICMP)
+        return 0;
+
+    if ((icmplen = len - iplen) < PROBE_ICMP_LEN)
+        return 0;
+
+    type = icmp->icmp_type;
+    code = icmp->icmp_code;
+
+    if ((type == ICMP_TIMXCEED && code == ICMP_TIMXCEED_INTRANS) ||
+        type == ICMP_UNREACH || type == ICMP_PARAMPROB) {
+
+        origip = (struct ip *)(buf + iplen + PROBE_ICMP_LEN);
+        origiplen = origip << 2;
+
+        // ICMP header + Original IP header + First 8 bytes of data field
+        if (icmplen < PROBE_ICMP_LEN + origiplen + 8)
+            return 0;
+
+        if (origip->ip_dst.s_addr != dstAddr.s_addr)
+            return 0;
+
+        // IP header bad length
+        if (type == ICMP_PARAMPROB &&
+            *((u_char *)origip + 20) == 0x44)
+            return -2;
+
+        if (type == ICMP_UNREACH && code == ICMP_UNREACH_NEEDFRAG) {
+#ifdef HAVE_ICMP_NEXTMTU
+            pmtu = ntohs(icmp->icmp_nextmtu);
+#else
+            pmtu = ntohs(((struct my_pmtu *)&icmp->icmp_void)->ipm_nextmtu);
+#endif
+            return ((type == ICMP_TIMXCEED) ? -1 : code + 1);
+        }
+
+    }
+
+    return 0;
+}
     
+
+int TcpProbeSock::recvTcp(u_char *buf, int len,
+                          uint32_t seq, uint32_t ack,
+                          u_short sport, u_short dport)
+{
+    //
+    // Return:
+    // 
+    //   -1 - captured write() packet
+    //    0 - Packet too short or other
+    //    1 - received RST packet
+    //    2 - received non-RST packet
+    //    
+
+    struct ip *ip;
+    struct tcphdr tcp;
+    int iplen, tcplen;
+
+    ip = (struct ip *)buf;
+    iplen = ip->ip_hl << 2;
+
+    if (iplen < PROBE_IP_LEN || ip->ip_p != IPPROTO_TCP)
+        return 0;
+
+    tcp = (struct tcphdr *)(buf + iplen);
+    tcplen = tcp->th_off << 2;
+    if (tcplen < PROBE_TCP_LEN)
+        return 0;
+
+    // obtain the write() packet after connection established
+    if (tcp->th_sport == htons(sport) &&
+        tcp->th_dport == htons(dport))
+        return -1;
+
+    if (tcp->th_sport == htons(dport) &&
+        tcp->th_dport == htons(sport) &&
+        (ntohl(tcp->th_ack) == seq + 1 || ntohl(tcp->th_seq) == ack))
+        return (tcp->th_flags & TH_RST) ? 1 : 2;
+
+    return 0;
+}
+        
