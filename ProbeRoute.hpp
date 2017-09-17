@@ -306,9 +306,10 @@ public:
     TcpProbeSock(u_short mtu, struct in_addr src, struct in_addr dst,
 		 int iplen = 0, u_char *ipbuf = NULL,
 		 int len = 0, u_char *buf = NULL,
-		 uint16_t id = (u_short)time(0) & 0xffff):
+		 uint16_t id = (u_short)time(0) & 0xffff,
+                 uint32_t seq = 0, uint32_t ack = 0):
 	ProbeSock(IPPROTO_TCP, mtu, src, dst, iplen, ipbuf, id),
-	tcpoptLen(len), tcphdrLen(PROBE_TCP_LEN) {
+	tcpoptLen(len), tcphdrLen(PROBE_TCP_LEN), tcpseq(seq), tcpack(ack) {
         assert(len >= 0);
         if (len) {
             if (!buf) {
@@ -334,15 +335,13 @@ public:
     void buildProtocolPacket() {}
 
     int buildProtocolHeader(u_char *buf, int protoLen, u_short sport, u_short dport,
-                            uint32_t seq = 0, uint32_t ack = 0, u_char flags = TH_SYN, bool badsum = false);
+                            u_char flags = TH_SYN, bool badsum = false);
 
     int buildProtocolPacket(u_char *buf, int protoLen, u_char ttl, u_short flagFrag,
-			    u_short sport, u_short dport, uint32_t seq, uint32_t ack);
+			    u_short sport, u_short dport);
 
     int recvTcp(u_char *buf, int len,
-                uint32_t seq = 0, uint32_t ack = 0,
-                u_short sport = ntohs(srcAddr.sin_port),
-                u_short dport = ntohs(dstAddr.sin_port));
+                u_short sport = 0, u_short dport = 0);
 
     
     int getTcphdrLen() {
@@ -353,6 +352,7 @@ private:
     u_char tcpopt[TCP_OPT_LEN];
     int tcpoptLen;
     int tcphdrLen;
+    uint32_t tcpseq, tcpack;
 }; // class TcpProbeSock
 
 inline std::ostream& operator<<(std::ostream& output,
@@ -382,8 +382,11 @@ inline std::ostream& operator<<(std::ostream& output,
     output << "tcpopt: ";
     // Should use boost::format or std::putf
     for (int i = 0; i < probe.tcpoptLen; i++)
-        std::printf("0x%02x%s", probe.tcpopt[i], i == probe.tcpoptLen - 1  ? "" : " ");
-    if (!probe.tcpoptLen) output << "null";
+        std::printf("0x%02x%s", probe.tcpopt[i], i == probe.tcpoptLen - 1  ? "\n" : " ");
+    if (!probe.tcpoptLen) output << "null" << std::endl;
+
+    output << "tcpseq: " << probe.tcpseq << std::endl;
+    output << "tcpack: " << probe.tcpack;
 
     return output;
 }
