@@ -135,7 +135,7 @@ int ProbeSock::sendFragPacket(const u_char *tcpbuf, const int packlen,
 
 	
 int TcpProbeSock::buildProtocolHeader(u_char *buf, int protoLen, u_short sport, u_short dport,
-				      uint32_t seq, uint32_t ack, u_char flags, bool badsum)
+				      u_char flags, bool badsum)
 {
     struct tcphdr *tcp;
     u_char *p;
@@ -147,8 +147,8 @@ int TcpProbeSock::buildProtocolHeader(u_char *buf, int protoLen, u_short sport, 
 
     tcp->th_sport = htons(sport);
     tcp->th_dport = htons(dport);
-    tcp->th_seq = htonl(seq);
-    tcp->th_ack = htonl(ack);
+    tcp->th_seq = htonl(tcpseq);
+    tcp->th_ack = htonl(tcpack);
     tcp->th_x2 = 0;
     tcp->th_off = tcphdrLen >> 2;
     tcp->th_flags = flags;
@@ -180,21 +180,21 @@ int TcpProbeSock::buildProtocolHeader(u_char *buf, int protoLen, u_short sport, 
 }
 
 int TcpProbeSock::buildProtocolPacket(u_char *buf, int protoLen, u_char ttl, u_short flagFrag,
-				      u_short sport, u_short dport, uint32_t seq, uint32_t ack)
+				      u_short sport, u_short dport)
 {
     int iplen, tcplen;
 
     iplen = buildIpHeader(buf, protoLen, ttl, flagFrag);
     assert(iplen == iphdrLen);
 	
-    tcplen = buildProtocolHeader(buf + iplen, protoLen, sport, dport, seq, ack);
+    tcplen = buildProtocolHeader(buf + iplen, protoLen, sport, dport);
     assert(tcplen == tcphdrLen);
 
     return iphdrLen + protoLen;	// total packet length
 }
 
 
-int ProbeSock::recvIcmp(u_char *buf, int len)
+int ProbeSock::recvIcmp(const u_char *buf, int len)
 {
     //
     // Return:
@@ -218,6 +218,8 @@ int ProbeSock::recvIcmp(u_char *buf, int len)
     if ((icmplen = len - iplen) < PROBE_ICMP_LEN)
         return 0;
 
+
+    icmp = (struct icmp *)(buf + iplen);
     type = icmp->icmp_type;
     code = icmp->icmp_code;
 
@@ -225,13 +227,14 @@ int ProbeSock::recvIcmp(u_char *buf, int len)
         type == ICMP_UNREACH || type == ICMP_PARAMPROB) {
 
         origip = (struct ip *)(buf + iplen + PROBE_ICMP_LEN);
-        origiplen = origip << 2;
+        origiplen = origip->ip_hl << 2;
 
         // ICMP header + Original IP header + First 8 bytes of data field
         if (icmplen < PROBE_ICMP_LEN + origiplen + 8)
             return 0;
-
-        if (origip->ip_dst.s_addr != dstAddr.s_addr)
+        
+        if (origip->ip_dst.s_addr != dstAddr.s_addr ||
+            origip->ip_id != htons(ipid))
             return 0;
 
         // IP header bad length
@@ -245,17 +248,16 @@ int ProbeSock::recvIcmp(u_char *buf, int len)
 #else
             pmtu = ntohs(((struct my_pmtu *)&icmp->icmp_void)->ipm_nextmtu);
 #endif
-            return ((type == ICMP_TIMXCEED) ? -1 : code + 1);
         }
 
+        return ((type == ICMP_TIMXCEED) ? -1 : code + 1);
     }
 
     return 0;
 }
     
 
-int TcpProbeSock::recvTcp(u_char *buf, int len,
-                          uint32_t seq, uint32_t ack,
+int TcpProbeSock::recvTcp(const u_char *buf, int len,
                           u_short sport, u_short dport)
 {
     //
@@ -267,8 +269,8 @@ int TcpProbeSock::recvTcp(u_char *buf, int len,
     //    2 - received non-RST packet
     //    
 
-    struct ip *ip;
-    struct tcphdr tcp;
+    const struct ip *ip;
+    const struct tcphdr *tcp;
     int iplen, tcplen;
 
     ip = (struct ip *)buf;
@@ -277,6 +279,9 @@ int TcpProbeSock::recvTcp(u_char *buf, int len,
     if (iplen < PROBE_IP_LEN || ip->ip_p != IPPROTO_TCP)
         return 0;
 
+    if ((tcplen = len - iplen) < PROBE_TCP_LEN)
+        return 0;
+    
     tcp = (struct tcphdr *)(buf + iplen);
     tcplen = tcp->th_off << 2;
     if (tcplen < PROBE_TCP_LEN)
@@ -289,7 +294,7 @@ int TcpProbeSock::recvTcp(u_char *buf, int len,
 
     if (tcp->th_sport == htons(dport) &&
         tcp->th_dport == htons(sport) &&
-        (ntohl(tcp->th_ack) == seq + 1 || ntohl(tcp->th_seq) == ack))
+        (ntohl(tcp->th_ack) == tcpseq + 1 || ntohl(tcp->th_seq) == tcpack))
         return (tcp->th_flags & TH_RST) ? 1 : 2;
 
     return 0;
