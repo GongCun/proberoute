@@ -229,10 +229,14 @@ private:
     const std::string CMD;
     struct bpf_program bpfCode;
 public:
-    ~ProbePcap();
+    ~ProbePcap() {
+#ifdef HAVE_PCAP_FREECODE
+        pcap_freecode(&bpfCode);
+#endif
+    }
     ProbePcap(const char *,
 	      const char *) throw(ProbeException);
-    char *nextPcap(int *len);
+    const u_char *nextPcap(int *len);
 };
 
 class ProbeSock {
@@ -274,7 +278,7 @@ public:
 
     virtual void buildProtocolHeader() = 0;
     virtual void buildProtocolPacket() = 0;
-    int recvIcmp(u_char *buf, int len);
+    int recvIcmp(const u_char *buf, int len);
 
     int getIphdrLen() {
 	return iphdrLen;
@@ -340,7 +344,7 @@ public:
     int buildProtocolPacket(u_char *buf, int protoLen, u_char ttl, u_short flagFrag,
 			    u_short sport, u_short dport);
 
-    int recvTcp(u_char *buf, int len,
+    int recvTcp(const u_char *buf, int len,
                 u_short sport = 0, u_short dport = 0);
 
     
