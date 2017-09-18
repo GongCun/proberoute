@@ -1,8 +1,9 @@
 #include "ProbeRoute.hpp"
 #include "assert.h"
 
-static sigjmp_buf jumpbuf;
+sigjmp_buf jumpbuf;
 
+#if 0
 static void sig_alrm(int signo) throw(ProbeException)
 {
     siglongjmp(jumpbuf, 1);
@@ -11,6 +12,7 @@ static void sig_alrm(int signo) throw(ProbeException)
         throw ProbeException("signal error");
 #endif
 }
+#endif
         
 
 int main(int argc, char *argv[])
@@ -59,13 +61,16 @@ int main(int argc, char *argv[])
         nprobe = 3;
 
         // make cout unbuffered
-        std::cout.rdbuf()->pubsetbuf(0, 0);
+        std::cout.setf(std::ios::unitbuf);
+        // std::cout.rdbuf()->pubsetbuf(0, 0);
 
         ProbePcap capture(addressInfo.getDevice().c_str(),
                           "tcp or icmp[0:1] == 3 or icmp[0:1] == 11 or icmp[0:1] == 12");
 
+#if 0
 	if (signal(SIGALRM, sig_alrm) == SIG_ERR)
             throw ProbeException("signal error");
+#endif
 
         for (ttl = 1; ttl < maxttl; ++ttl) {
             std::printf("%3d ", ttl);
