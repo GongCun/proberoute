@@ -1,6 +1,18 @@
 #include "ProbeRoute.hpp"
 #include "assert.h"
 
+static sigjmp_buf jumpbuf;
+
+static void sig_alrm(int signo) throw(ProbeException)
+{
+    siglongjmp(jumpbuf, 1);
+#ifdef _AIX
+    if (signal(SIGALRM, sig_alrm) == SIG_ERR)
+        throw ProbeException("signal error");
+#endif
+}
+        
+
 int main(int argc, char *argv[])
 {
     try {
@@ -17,7 +29,7 @@ int main(int argc, char *argv[])
 	int mtu;
 	struct in_addr src, dst;
 	struct sockaddr_in *sinptr;
-	int iplen, packlen;
+	int len, iplen, packlen;
 	u_short sport, dport;
 
 	mtu = addressInfo.getDevMtu();
@@ -34,23 +46,74 @@ int main(int argc, char *argv[])
 	std::cout << probeSock << std::endl;
 
 	iplen = probeSock.getIphdrLen();
-	packlen = mtu - iplen;
+	packlen = probeSock.getTcphdrLen();
 	std::cerr << "packlen = " << packlen << std::endl;
-	// probeSock.buildProtocolHeader(buf, packlen, sport, dport, 0, 0, TH_ACK); 
-	probeSock.buildProtocolHeader(buf, packlen, sport, dport, 0, 0);
-	probeSock.sendFragPacket(buf, packlen, 255, 32,
-				 addressInfo.getForeignSockaddr(),
-				 addressInfo.getForeignSockaddrLen());
+	probeSock.buildProtocolHeader(buf, packlen, sport, dport);
 
-	// len = probeSock.buildProtocolPacket(buf, mtu - iplen, 255, IP_DF,
-	// 				    sport, dport, 0, 0); 
+        int ttl, nprobe, i, maxttl = 30, fragsize = 0;
+        int waittime = 1;
+        int caplen;
+        const u_char *ptr;
+        const struct ip *ip;
+        bool found = false;
+        nprobe = 3;
+
+        // make cout unbuffered
+        std::cout.rdbuf()->pubsetbuf(0, 0);
+
+        ProbePcap capture(addressInfo.getDevice().c_str(),
+                          "tcp or icmp[0:1] == 3 or icmp[0:1] == 11 or icmp[0:1] == 12");
+
+	if (signal(SIGALRM, sig_alrm) == SIG_ERR)
+            throw ProbeException("signal error");
+
+        for (ttl = 1; ttl < maxttl; ++ttl) {
+            std::printf("%3d ", ttl);
+            for (i = 0; i < nprobe; i++) {
+                if (fragsize)
+                    probeSock.sendFragPacket(buf, packlen, ttl, fragsize,
+                                             addressInfo.getForeignSockaddr(),
+                                             addressInfo.getForeignSockaddrLen());
+                else {
+                    
+                    len = probeSock.buildProtocolPacket(buf, packlen, ttl,
+                                                        IP_DF, sport, dport);
+                    probeSock.sendPacket(buf, len, 0,
+                                         addressInfo.getForeignSockaddr(),
+                                         addressInfo.getForeignSockaddrLen());
+                }
+                
+                alarm(waittime);
+
+                if (sigsetjmp(jumpbuf, 1) != 0) {
+                    std::cout << " *";
+                    alarm(0);
+                    continue;
+                }
+
+                for ( ; ; ) {
+                    ptr = capture.nextPcap(&caplen);
+                    assert(ptr != NULL);
+                    // std::cerr << "caplen = " << caplen << std::endl;
+                    if (probeSock.recvIcmp(ptr, caplen) ||
+                        probeSock.recvTcp(ptr, caplen, sport, dport) > 0)
+                        break;
+                }
+
+                ip = (struct ip *)ptr;
+                std::cout << " " << inet_ntoa(ip->ip_src);
+                if (ip->ip_src.s_addr == dst.s_addr)
+                    found = true;
+            }
+            std::cout << std::endl;
+            if (found) break;
+        }
+
+
 
 	// std::cout << "total len = " << len << std::endl;
 
 
-	// probeSock.sendPacket(buf, len, 0, addressInfo.getForeignSockaddr(),
-        //                      addressInfo.getForeignSockaddrLen());
-	// probeSock.buildProtocolPacket(buf, mtu,
 
         // addressInfo.getDeviceInfo();
         // addressInfo.printDeviceInfo();
