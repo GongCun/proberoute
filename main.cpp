@@ -29,7 +29,7 @@ int main(int argc, char *argv[])
 	memset(buf, 0xa5, sizeof(buf)); // just pad pattern
 
 	int mtu;
-	struct in_addr src, dst;
+	struct in_addr src, dst, lastrecv;
 	struct sockaddr_in *sinptr;
 	int len, iplen, packlen;
 	u_short sport, dport;
@@ -62,7 +62,6 @@ int main(int argc, char *argv[])
 
         // make cout unbuffered
         std::cout.setf(std::ios::unitbuf);
-        // std::cout.rdbuf()->pubsetbuf(0, 0);
 
         ProbePcap capture(addressInfo.getDevice().c_str(),
                           "tcp or icmp[0:1] == 3 or icmp[0:1] == 11 or icmp[0:1] == 12");
@@ -99,14 +98,17 @@ int main(int argc, char *argv[])
                 for ( ; ; ) {
                     ptr = capture.nextPcap(&caplen);
                     assert(ptr != NULL);
-                    // std::cerr << "caplen = " << caplen << std::endl;
                     if (probeSock.recvIcmp(ptr, caplen) ||
                         probeSock.recvTcp(ptr, caplen, sport, dport) > 0)
                         break;
                 }
 
                 ip = (struct ip *)ptr;
-                std::cout << " " << inet_ntoa(ip->ip_src);
+                if (memcmp(&ip->ip_src, &lastrecv, sizeof(struct in_addr)) ||
+                    i == 0) {
+                    std::cout << " " << inet_ntoa(ip->ip_src);
+                    lastrecv = ip->ip_src;
+                }
                 if (ip->ip_src.s_addr == dst.s_addr)
                     found = true;
             }
