@@ -49,14 +49,13 @@ ProbePcap::ProbePcap(const char *dev,
     }
 }
 
-    
 
-char *ProbePcap::nextPcap(int *len)
+const u_char *ProbePcap::nextPcap(int *len)
 {
-    char *ptr;
+    const u_char *ptr;
     struct pcap_pkthdr hdr;
 
-    while ((ptr = (char *)pcap_next(handle, &hdr)) == NULL) ;
+    while ((ptr = pcap_next(handle, &hdr)) == NULL) ;
 
     *len = hdr.caplen;
 
