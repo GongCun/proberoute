@@ -58,6 +58,9 @@ int main(int argc, char *argv[])
         const u_char *ptr;
         const struct ip *ip;
         bool found = false;
+        struct timeval tv;
+        double rtt;
+
         nprobe = 3;
 
         // make cout unbuffered
@@ -74,6 +77,9 @@ int main(int argc, char *argv[])
         for (ttl = 1; ttl < maxttl; ++ttl) {
             std::printf("%3d ", ttl);
             for (i = 0; i < nprobe; i++) {
+                if (gettimeofday(&tv, NULL) < 0)
+                    throw ProbeException("gettimeofday");
+
                 if (fragsize)
                     probeSock.sendFragPacket(buf, packlen, ttl, fragsize,
                                              addressInfo.getForeignSockaddr(),
@@ -103,12 +109,16 @@ int main(int argc, char *argv[])
                         break;
                 }
 
+                if ((rtt = delta(&tv)) < 0)
+                    throw ProbeException("delta");
                 ip = (struct ip *)ptr;
                 if (memcmp(&ip->ip_src, &lastrecv, sizeof(struct in_addr)) ||
                     i == 0) {
                     std::cout << " " << inet_ntoa(ip->ip_src);
                     lastrecv = ip->ip_src;
                 }
+                std::printf(" %.3f ms", rtt);
+                
                 if (ip->ip_src.s_addr == dst.s_addr)
                     found = true;
             }
