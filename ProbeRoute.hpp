@@ -4,6 +4,7 @@
 #include "config.h"
 
 #include <cstdlib>
+#include <cstdio>
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -45,6 +46,7 @@
 #include <setjmp.h>
 #include <signal.h>
 #include <strings.h>		// bzero()
+#include <string.h>		// memset()
 #include <assert.h>
 
 #include <iostream>
@@ -74,6 +76,8 @@
 #define PROBE_TCP_LEN 20	 // TCP header length (not include any option)
 #define PROBE_UDP_LEN 8		 // UDP header length 
 #define PROBE_ICMP_LEN 8	 // ICMP header length 
+
+extern sigjmp_buf jumpbuf;
 
 inline void safeFree(void *point)
 {
@@ -107,6 +111,21 @@ inline uint32_t in_checksum(uint16_t *addr, int len)
 inline uint16_t checksum(uint16_t *addr, int len)
 {
     return CKSUM_CARRY(in_checksum(addr, len));
+}
+
+inline double delta(struct timeval *last)
+{
+    struct timeval now;
+    
+    if (gettimeofday((&now), NULL) == -1)
+        return -1;
+
+    if ((now.tv_usec -= last->tv_usec) < 0) {
+        --now.tv_sec;
+        now.tv_usec += 1000000;
+    }
+    now.tv_sec -= last->tv_sec;
+    return now.tv_sec * 1000.0 + now.tv_usec / 1000.0;
 }
 
 
@@ -269,7 +288,7 @@ public:
         }
     }
 
-    int sendPacket(const void *, size_t, int, const struct sockaddr *, socklen_t) throw(ProbeException);
+    ssize_t sendPacket(const void *, size_t, int, const struct sockaddr *, socklen_t) throw(ProbeException);
     int sendFragPacket(const u_char *tcpbuf, const int packlen,
 		       const u_char ttl, const int fragsize,
 		       const struct sockaddr *to, socklen_t tolen) throw(ProbeException);
@@ -317,6 +336,8 @@ public:
         assert(len >= 0);
         if (len) {
             if (!buf) {
+                // *NOTE* - The MSS option applies only to SYN packet, and the SYN packet
+                // has no payload (just TCP header).
                 u_char *p = tcpopt;
                 *p++ = 2;		 // TCP mss option
                 *p++ = 4;		 // option len
