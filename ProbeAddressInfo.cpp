@@ -48,6 +48,9 @@ void ProbeAddressInfo::getDeviceInfo() throw(ProbeException)
     for (ptr = buf; ptr < buf + ifc.ifc_len; ) {
 	ifr = (struct ifreq *)ptr;
 
+#ifdef _LINUX
+	ptr += sizeof(*ifr);
+#else
 #ifdef HAVE_SOCKADDR_SA_LEN
 	len = std::max(static_cast<int>(sizeof(struct sockaddr)),
 		       static_cast<int>(ifr->ifr_addr.sa_len));
@@ -64,8 +67,8 @@ void ProbeAddressInfo::getDeviceInfo() throw(ProbeException)
 	    break;
 	}
 #endif	// HAVE_SOCKADDR_SA_LEN
-
 	ptr += sizeof(ifr->ifr_name) + len;  // for next one in buffer
+#endif  // _LINUX 
 
 	if (ifr->ifr_addr.sa_family != AF_INET)
 	    continue;
@@ -83,7 +86,7 @@ void ProbeAddressInfo::getDeviceInfo() throw(ProbeException)
         *deviceInfoNext = deviceInfoPtr;       // prev points to this new one
         deviceInfoNext = &deviceInfoPtr->next; // points to next one goes here
         
-	deviceInfoPtr->flags = flags;	     // IFF_xxx values
+	deviceInfoPtr->flags = flags;          // IFF_xxx values
 
 #if defined(SIOCGIFMTU) && defined(HAVE_STRUCT_IFREQ_IFR_MTU)
 	if (ioctl(sockfd, SIOCGIFMTU, &ifrcopy) < 0)
@@ -186,15 +189,12 @@ ProbeAddressInfo::ProbeAddressInfo(const char *foreignHost, const char *foreignS
     hints.ai_family = AF_INET;
     hints.ai_socktype = 0;
 
-    // std::cout << "foreignService = " << foreignService << std::endl;
-
     if ((n = getaddrinfo(foreignHost, foreignService, &hints, &res)) != 0)
         throw ProbeException("getaddrinfo error", gai_strerror(n));
 
     bzero(&localAddr, sizeof(struct sockaddr));
 
     sockfd = -1;
-    // assert(res);
 
     for (curr = res; curr && sockfd < 0; curr = curr->ai_next)
 	if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) >= 0) {
@@ -209,9 +209,6 @@ ProbeAddressInfo::ProbeAddressInfo(const char *foreignHost, const char *foreignS
 	freeaddrinfo(res);
 	throw ProbeException("Unable to connect by UDP");
     }
-
-    // paddr = (struct sockaddr_in *)curr->ai_addr;
-    // std::cout << "foreignAddr: " << inet_ntoa(paddr->sin_addr) << std::endl;
 
     foreignAddrLen = curr->ai_addrlen;
     memcpy(&foreignAddr, curr->ai_addr, foreignAddrLen);
