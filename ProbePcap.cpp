@@ -50,10 +50,22 @@ ProbePcap::ProbePcap(const char *dev,
 }
 
 
+static void sig_alrm(int signo) throw(ProbeException)
+{
+    siglongjmp(jumpbuf, 1);
+#ifdef _AIX
+    if (signal(SIGALRM, sig_alrm) == SIG_ERR)
+	throw ProbeException("signal error");
+#endif
+}
+
 const u_char *ProbePcap::nextPcap(int *len)
 {
     const u_char *ptr;
     struct pcap_pkthdr hdr;
+
+    if (signal(SIGALRM, sig_alrm) == SIG_ERR)
+	throw ProbeException("signal error");
 
     while ((ptr = pcap_next(handle, &hdr)) == NULL) ;
 

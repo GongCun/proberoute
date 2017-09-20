@@ -1,22 +1,12 @@
 #include "ProbeRoute.hpp"
-#include "assert.h"
+#include <assert.h>
+// #include <getopt.h>
 
 sigjmp_buf jumpbuf;
 
-#if 0
-static void sig_alrm(int signo) throw(ProbeException)
-{
-    siglongjmp(jumpbuf, 1);
-#ifdef _AIX
-    if (signal(SIGALRM, sig_alrm) == SIG_ERR)
-        throw ProbeException("signal error");
-#endif
-}
-#endif
-        
-
 int main(int argc, char *argv[])
 {
+    usage();
     try {
 	if (argc != 3)
 	    throw ProbeException("Usage: proberoute <host> <service>");

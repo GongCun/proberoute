@@ -85,10 +85,10 @@ int ProbeSock::buildIpHeader(u_char *buf, int protoLen, u_char ttl, u_short flag
 
 
 
-int ProbeSock::sendPacket(const void *buf, size_t buflen, int flags, const struct sockaddr *to, socklen_t tolen)
+ssize_t ProbeSock::sendPacket(const void *buf, size_t buflen, int flags, const struct sockaddr *to, socklen_t tolen)
     throw(ProbeException)
 {
-    int len;
+    ssize_t len;
     if ((len = sendto(rawfd, buf, buflen, flags, to, tolen)) != buflen)
 	throw ProbeException("sendto error");
 
@@ -116,10 +116,7 @@ int ProbeSock::sendFragPacket(const u_char *tcpbuf, const int packlen,
             else		   // exactly the last packet
                 flags = offset >> 3;
         } else {
-            // if (remlen == packlen) // the first packet, no offset
-                // flags = IP_MF;
-            // else                   // neither the first nor the last packet
-                flags = (offset >> 3) | IP_MF;
+            flags = (offset >> 3) | IP_MF;
         }
 
         iplen = buildIpHeader(buf, sendlen, ttl, flags);
