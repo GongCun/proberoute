@@ -3,10 +3,64 @@
 // #include <getopt.h>
 
 sigjmp_buf jumpbuf;
+int verbose;
+int protocol;
+int sport;
+const char *device;
+int nquery = 3;
+int waittime = 3;
+int firstttl = 1, maxttl = 30;
+int fragsize;
+int mtu;
+int conn;
+int badsum, badlen;
+int echo, timestamp;
+const char *host, *service, *srcip;
+u_char flags;
+
+static void usage()
+{
+#define P(s) std::cerr << s << std::endl
+#include "usage.h"
+#undef P
+    exit(1);
+}
+
+#define printOpt(x) std::cout << #x": " << x << std::endl
+
+static void printOpts()
+{
+    printOpt(verbose);
+    printOpt(protocol);
+    printOpt(sport);
+    printOpt(nullToEmpty(device));
+    printOpt(nquery);
+    printOpt(waittime);
+    printOpt(firstttl);
+    printOpt(maxttl);
+    printOpt(fragsize);
+    printOpt(mtu);
+    printOpt(conn);
+    printOpt(badsum);
+    printOpt(badlen);
+    printOpt(echo);
+    printOpt(timestamp);
+    printOpt(nullToEmpty(host));
+    printOpt(nullToEmpty(service));
+    printOpt(nullToEmpty(srcip));
+    std::printf("flags: 0x%02x\n", flags);
+}
 
 int main(int argc, char *argv[])
 {
-    usage();
+    if (parseOpt(argc, argv) < 0)
+        usage();
+
+    printOpts();
+
+    return 0;
+
+#if 0
     try {
 	if (argc != 3)
 	    throw ProbeException("Usage: proberoute <host> <service>");
@@ -132,6 +186,7 @@ int main(int argc, char *argv[])
 	std::cerr << e.what() << std::endl;
 	exit(1);
     }
-    return 0;
+#endif
+
 }
     
