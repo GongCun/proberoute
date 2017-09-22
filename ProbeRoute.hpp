@@ -46,12 +46,12 @@
 #include <setjmp.h>
 #include <signal.h>
 #include <strings.h>		// bzero()
-#include <string.h>		// memset()
 #include <assert.h>
 
 #include <iostream>
 #include <sstream>
 #include <string>
+#include <cstring>		// memset(), strcmp(), ...
 #include <stdexcept>
 #include <algorithm>
 // #include <list>
@@ -78,6 +78,20 @@
 #define PROBE_ICMP_LEN 8	 // ICMP header length 
 
 extern sigjmp_buf jumpbuf;
+extern int verbose;
+extern int protocol;
+extern int sport;
+extern const char *device;
+extern int nquery;
+extern int waittime;
+extern int firstttl, maxttl;
+extern int fragsize;
+extern int mtu;
+extern int conn;
+extern int badsum, badlen;
+extern int echo, timestamp;
+extern const char *host, *service, *srcip;
+extern u_char flags;
 
 inline void safeFree(void *point)
 {
@@ -415,6 +429,8 @@ inline std::ostream& operator<<(std::ostream& output,
 
     return output;
 }
+
+int parseOpt(int argc, char **argv);
 
 #endif
 
