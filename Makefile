@@ -1,13 +1,15 @@
-CC = xlc++ -g
-override CFLAGS += -qflag=i:i -qinfo=use
-override CPPFLAGS += -qflag=i:i -qinfo=use -I/usr/include -D_AIX 
-override LIBS += -L/usr/lib -lpcap 
+CC = c++
+override CFLAGS += -Wall -g
+override CPPFLAGS += -Wall -g
+override LIBS += -lpcap -lpopt
 
-OBJS = main.o ProbeAddressInfo.o ProbeException.o ProbePcap.o ProbeSock.o
+OBJS = main.o ProbeAddressInfo.o ProbeException.o ProbePcap.o ProbeSock.o \
+options_popt.cpp
 
 PROGS = proberoute
 
 all: ${PROGS}
+
 
 proberoute: $(OBJS) 
 	${CC} ${CFLAGS} -o $@ $^ $(LIBS)
@@ -17,7 +19,7 @@ proberoute: $(OBJS)
 #$(OBJS): export OBJC_INCLUDE_PATH = /usr/lib
 
 %.o: %.cpp ProbeRoute.hpp config.h usage.h
-	$(CC) $(CPPFLAGS) -c -o $@ $<
+	$(CC) $(CFLAGS) -c -o $@ $<
 
 usage.h: usage.txt
 	sed <$< >$@ -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/.*/P("&");/'

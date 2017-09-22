@@ -1,49 +1,38 @@
 Usage: proberoute [OPTION] DEST
-  or : proberoute [OPTION] DEST PORT MTU
+  or : proberoute [OPTION] DEST PORT
 
 Options
- -v, --verbose    Verbose output
-
- -P <protocol>    Send packets of specified IP protocol: UDP, TCP or ICMP
-     --tcp        Specify the TCP protocol
-     --udp        Specify the UDP protocol
-     --icmp       Specify the ICMP protocol
-
+ -v, --verbose    Verbose output.
+ -P <protocol>    Send packets of specified IP protocol: UDP, TCP or ICMP.
+     --tcp        Specify the TCP protocol.
+     --udp        Specify the UDP protocol.
+     --icmp       Specify the ICMP protocol.
  -p, --port <portnum>
-                  Sets the destination port number for TCP
-
+                  Set the destination port number for TCP or UDP, default is
+                  random port.
  -g, --source-port <portnum>
-                  For UDP, TCP, sets the source port number used in probes
-
+                  For UDP, TCP, set the source port number used in probes. For
+                  TCP, default is random port; For UDP, default is 33434.
+ -S, --source-ip <IPaddr>
+                  Set the source address for probes, must use -i to specify the
+                  interface you wish to send.
  -i <iface>       Specify a network interface to obtain the source IP address
-                  for outgoing probe packets
-
- -q <nqueries>    Set the number of probes per hop (default is 3)
-
- -w <waittime>    Set the time (in seconds) to wait for a response to a probe
-                  (default is 3 sec.)
-
- -f <first_tll>   Set the initial time-to-live used in outgoing probe packets
-                  (default is 1, i.e., start with the first hop)
-
+                  for outgoing probe packets.
+ -q <nqueries>    Set the number of probes per hop, default is 3.
+ -w <waittime>    Set the time (in seconds) to wait for a response to a probe,
+                  default is 3 sec.
+ -f <first_tll>   Set the initial time-to-live used in outgoing probe packets,
+                  default is 1, i.e., start with the first hop.
  -m <max_ttl>     Set the max time-to-live (max number of hops) used in outgoing
-                  probe packets
-
+                  probe packets.
  -F, --frag-size <frag_size>
-                  Specify the IP fragment size (must be a multiple of 8)
-                  (default is "don't fragment")
-
- --mtu=<MTU>      Using the specified MTU
-
- --conn           TCP connect probe, used to detect path MTU
-
+                  Specify the IP fragment size (must be a multiple of 8),
+                  default is "don't fragment".
+ -s, --mtu=<MTU>  Using the specified MTU, default is auto detection.
+ --conn           TCP connect probe, used to detect the path MTU.
  --syn/ack/null/fin/xmas
-                  TCP SYN, ACK, Null, FIN and Xmas probes
-
- --badsum         Send packet with a bogus TCP/UDP/ICMP checksum
-
- --badlen         Send packet with a bad IP option length
-
- -e, --echo       Send ICMP echo request probes
-
- -t, --timestamp  Send ICMP timestamp request probes
+                  TCP SYN, ACK, Null, FIN and Xmas probes.
+ --badsum         Send packet with a bogus TCP/UDP/ICMP checksum.
+ --badlen         Send packet with a bad IP option length.
+ -e, --echo       Send ICMP echo request probes.
+ -t, --timestamp  Send ICMP timestamp request probes.
