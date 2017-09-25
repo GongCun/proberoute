@@ -152,10 +152,12 @@ int main(int argc, char *argv[])
                             break;
                     }
                     if (verbose > 2)
-                        std::cerr << "assign ipid " << ipid
+                        std::cerr << "captured ipid " << ipid
                                   << " seq " << seq
                                   << " ack " << ack << std::endl;
-                    
+
+		    // set out-of-order sequence
+		    ++ipid, ++seq;
                     
 		}
 		else if (n > 0) {
