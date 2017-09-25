@@ -177,14 +177,15 @@ int TcpProbeSock::buildProtocolHeader(u_char *buf, int protoLen, u_short sport, 
 }
 
 int TcpProbeSock::buildProtocolPacket(u_char *buf, int protoLen, u_char ttl, u_short flagFrag,
-				      u_short sport, u_short dport)
+				      u_short sport, u_short dport,
+				      u_char flags, bool badsum)
 {
     int iplen, tcplen;
 
     iplen = buildIpHeader(buf, protoLen, ttl, flagFrag);
     assert(iplen == iphdrLen);
 	
-    tcplen = buildProtocolHeader(buf + iplen, protoLen, sport, dport);
+    tcplen = buildProtocolHeader(buf + iplen, protoLen, sport, dport, flags, badsum);
     assert(tcplen == tcphdrLen);
 
     return iphdrLen + protoLen;	// total packet length
@@ -260,7 +261,11 @@ bool TcpProbeSock::capWrite(
     u_short dport,
     uint16_t& ipid,
     uint32_t& seq,
-    uint32_t& ack
+    uint32_t& ack,
+    u_char *ipopt,
+    int &ipoptlen,
+    u_char *tcpopt,
+    int& tcpoptlen
 ) {
     // Return:
     //   true  - captured write()
@@ -284,11 +289,20 @@ bool TcpProbeSock::capWrite(
         return false;
 
     // obtain the write() packet after connection established
-    if (tcp->th_sport == htons(sport) &&
-        tcp->th_dport == htons(dport)) {
-        ipid = ntohs(ip->ip_id) + 1;
-        seq = ntohl(tcp->th_seq) + 1; // set out-of-order sequence
+    if (
+	tcp->th_sport == htons(sport) &&
+        tcp->th_dport == htons(dport) &&
+	tcp->th_flags & TH_PUSH
+    ) {
+        ipid = ntohs(ip->ip_id);
+        seq = ntohl(tcp->th_seq);
         ack = ntohl(tcp->th_ack);
+	if ((ipoptlen = iplen - PROBE_IP_LEN) > 0) {
+	    memcpy(ipopt, (u_char *)ip + PROBE_IP_LEN, ipoptlen);
+	}
+	if ((tcpoptlen = tcplen - PROBE_TCP_LEN) > 0) {
+	    memcpy(tcpopt, (u_char *)tcp + PROBE_TCP_LEN, tcpoptlen);
+	}
         return true;
     }
 

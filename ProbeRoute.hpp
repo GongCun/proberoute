@@ -384,7 +384,8 @@ public:
                             u_char flags = TH_SYN, bool badsum = false);
 
     int buildProtocolPacket(u_char *buf, int protoLen, u_char ttl, u_short flagFrag,
-			    u_short sport, u_short dport);
+			    u_short sport, u_short dport,
+			    u_char flags, bool badsum);
 
     int recvTcp(const u_char *buf, int len,
                 u_short sport, u_short dport);
@@ -396,7 +397,11 @@ public:
         u_short dport,
         uint16_t& ipid,
         uint32_t& seq,
-        uint32_t& ack
+        uint32_t& ack,
+	u_char *ipopt,
+	int &ipoptlen,
+	u_char *tcpopt,
+	int& tcpoptlen
     );
 
     static int nonbConn(int fd, const struct sockaddr *addr, socklen_t addrlen,
@@ -426,7 +431,7 @@ inline std::ostream& operator<<(std::ostream& output,
     output << "ipopt: ";
     // Should use boost::format or std::putf
     for (int i = 0; i < probe.ipoptLen; i++)
-        std::printf("0x%02x%s", probe.ipopt[i], i == probe.ipoptLen - 1  ? "\n" : " ");
+        std::printf("%02x ", probe.ipopt[i]);
     if (!probe.ipoptLen) output << "null"; 
 
     return output;
@@ -441,7 +446,7 @@ inline std::ostream& operator<<(std::ostream& output,
     output << "tcpopt: ";
     // Should use boost::format or std::putf
     for (int i = 0; i < probe.tcpoptLen; i++)
-        std::printf("0x%02x%s", probe.tcpopt[i], i == probe.tcpoptLen - 1  ? "\n" : " ");
+        std::printf("%02x%s", probe.tcpopt[i], i == probe.tcpoptLen - 1  ? "\n" : " ");
     if (!probe.tcpoptLen) output << "null" << std::endl;
 
     output << "tcpseq: " << probe.tcpseq << std::endl;

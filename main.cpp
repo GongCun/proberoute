@@ -18,7 +18,16 @@ int echo, timestamp;
 const char *host, *service, *srcip;
 u_char flags = TH_SYN;
 
+int connfd = -1;
+int origttl;
+static void Close();
+
 #define printOpt(x) std::cout << #x": " << x << std::endl
+
+static void sig_int(int signo)
+{
+    exit(1);
+}
 
 static void printOpts()
 {
@@ -46,12 +55,11 @@ static void printOpts()
 int main(int argc, char *argv[])
 {
     const int on = 1;
-    int connfd = -1;
     std::string msg;
     struct linger linger;
     int i, n;
     socklen_t optlen;
-    int origttl = 0, ttl;
+    int ttl;
     const u_char *ptr;
     const struct ip *ip;
     struct sockaddr_in *sinptr;
@@ -102,6 +110,8 @@ int main(int argc, char *argv[])
         ProbePcap capture(addressInfo.getDevice().c_str(),
                           "tcp or icmp[0:1] == 3 or icmp[0:1] == 11 or icmp[0:1] == 12");
 
+	signal(SIGINT, sig_int);
+
 	switch (protocol) {
 	case IPPROTO_TCP:
 	    if (conn && !addressInfo.isSameLan()) { // no need use connect probe in the
@@ -109,7 +119,12 @@ int main(int argc, char *argv[])
 		if ((connfd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
 		    throw ProbeException("socket");
 
+		// Must abort the connection immediately when it is closed, to ensure the
+		// write() packet wouldn't arrive to the target host.
 		linger.l_onoff = 1, linger.l_linger = 0;
+		if (setsockopt(connfd, SOL_SOCKET, SO_LINGER, &linger, sizeof(linger)) < 0)
+		    throw ProbeException("setsockopt SO_LINGER");
+
 		if (setsockopt(connfd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)) < 0)
 		    throw ProbeException("setsockopt SO_REUSEADDR");
 #ifdef SO_REUSEPORT
@@ -136,6 +151,10 @@ int main(int argc, char *argv[])
 		    // the write() packet arriving to remote host, we need to set the
 		    // TTL to 1.
 
+		    std::cerr << "register atexit\n";
+		    if (atexit(Close) != 0)
+			throw ProbeException("atexit");
+
                     optlen = sizeof(origttl);
                     if (getsockopt(connfd, IPPROTO_IP, IP_TTL, &origttl, &optlen) < 0)
                         throw ProbeException("getsockopt IP_TTL");
@@ -147,10 +166,6 @@ int main(int argc, char *argv[])
                     if (write(connfd, "\xa5", 1) != 1)
                         throw ProbeException("write");
 
-		    std::cerr << "origttl: " << origttl << std::endl;
-		    if (setsockopt(connfd, IPPROTO_IP, IP_TTL, &origttl, sizeof(origttl)) < 0)
-			throw ProbeException("setsockopt IP_TTL");
-                        
                     // capture the write() packet immediately or when it retransmit
                     for ( ; ; ) {
                         ptr = capture.nextPcap(&caplen);
@@ -170,7 +185,7 @@ int main(int argc, char *argv[])
                             ))
                             break;
                     }
-		    std::cerr << "break\n";
+
                     if (verbose > 2) {
                         std::cerr << "captured ipid: " << ipid
                                   << " seq: " << seq
@@ -317,11 +332,7 @@ int main(int argc, char *argv[])
 	    if (found) break;
 	}
 
-	std::cerr << "finished\n";
-	if (connfd >= 0) {
-	    close(connfd);
-	}
-	
+
     } catch (ProbeException &e) {
 	std::cerr << e.what() << std::endl;
 	exit(1);
@@ -331,3 +342,14 @@ int main(int argc, char *argv[])
 
 }
     
+static void Close()
+{
+    if (connfd >= 0 && origttl > 0) {
+	std::cerr << "connfd = " << connfd << " origttl = " << origttl << std::endl;
+	// Resume the original TTL to ensure that we can discard the
+	// connection successfully.
+	setsockopt(connfd, IPPROTO_IP, IP_TTL, &origttl, sizeof(origttl));
+	close(connfd);
+    }
+}
+	
