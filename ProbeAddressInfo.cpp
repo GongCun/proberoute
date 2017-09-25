@@ -128,30 +128,36 @@ void ProbeAddressInfo::getDeviceInfo() throw(ProbeException)
     free(buf);
 }
 
-void ProbeAddressInfo::printDeviceInfo()
+void ProbeAddressInfo::deviceInfo::print()
 {
     struct sockaddr_in *sinptr;
+
+    std::cout << name << ": ";
+
+    sinptr = (struct sockaddr_in *)addr;
+    std::cout << "inet " << inet_ntoa(sinptr->sin_addr) << ' ';
+
+    if (netmask) {
+        sinptr = (struct sockaddr_in *)netmask;
+        std::cout << "netmask " << inet_ntoa(sinptr->sin_addr) << ' ';
+    }
+
+    if (brdaddr) {
+        sinptr = (struct sockaddr_in *)brdaddr;
+        std::cout << "broadcast " << inet_ntoa(sinptr->sin_addr) << ' ';
+    }
+
+    std::cout << "mtu " << mtu << std::endl;
+}
+
+    
+void ProbeAddressInfo::printDeviceInfo()
+{
     struct deviceInfo *deviceInfoPtr;
 
     for (deviceInfoPtr = deviceInfoList; deviceInfoPtr;
          deviceInfoPtr = deviceInfoPtr->next) {
-
-	std::cout << deviceInfoPtr->name << ": ";
-
-	sinptr = (struct sockaddr_in *)deviceInfoPtr->addr;
-	std::cout << "inet " << inet_ntoa(sinptr->sin_addr) << ' ';
-
-	if (deviceInfoPtr->netmask) {
-	    sinptr = (struct sockaddr_in *)deviceInfoPtr->netmask;
-	    std::cout << "netmask " << inet_ntoa(sinptr->sin_addr) << ' ';
-	}
-
-	if (deviceInfoPtr->brdaddr) {
-	    sinptr = (struct sockaddr_in *)deviceInfoPtr->brdaddr;
-	    std::cout << "broadcast " << inet_ntoa(sinptr->sin_addr) << ' ';
-	}
-
-        std::cout << "mtu " << deviceInfoPtr->mtu << std::endl;
+        deviceInfoPtr->print();
     }
 
 }
@@ -162,9 +168,6 @@ void ProbeAddressInfo::freeDeviceInfo()
     // struct sockaddr_in *ptr;
 
     for (p = deviceInfoList; p; p = pnext) {
-	// ptr = (struct sockaddr_in *)p->addr;
-	// std::cout << inet_ntoa(ptr->sin_addr) << std::endl;
-	
         pnext = p->next;	// can't fetch pnext after delete
         delete p;		// the p{} itself
     }
@@ -175,7 +178,7 @@ void ProbeAddressInfo::freeDeviceInfo()
 ProbeAddressInfo::ProbeAddressInfo(const char *foreignHost, const char *foreignService,
                                    const char *localHost, int localPort,
                                    const char *dev, u_short mtu) throw(ProbeException)
-    : device(nullToEmpty(dev)), devMtu(mtu)
+    : device(nullToEmpty(dev)), devMtu(mtu), sameLan(true)
 {
     struct addrinfo hints, *res, *curr;
     struct sockaddr_in *paddr;
@@ -188,6 +191,9 @@ ProbeAddressInfo::ProbeAddressInfo(const char *foreignHost, const char *foreignS
     hints.ai_flags = AI_CANONNAME;
     hints.ai_family = AF_INET;
     hints.ai_socktype = 0;
+
+    if (foreignService == NULL)
+	foreignService = "33434"; // default is 32768 + 666 = 33434
 
     if ((n = getaddrinfo(foreignHost, foreignService, &hints, &res)) != 0)
         throw ProbeException("getaddrinfo error", gai_strerror(n));
@@ -234,20 +240,54 @@ ProbeAddressInfo::ProbeAddressInfo(const char *foreignHost, const char *foreignS
     // fetch the device name or mtu size by the IP address
     getDeviceInfo();
     
-    for (struct deviceInfo *p = deviceInfoList; p; p = p->next) {
-	if (!device.empty() && device == p->name) exist = true;
-
+    struct deviceInfo *p;
+    for (p = deviceInfoList; p; p = p->next) {
 	if (((struct sockaddr_in *)p->addr)->sin_addr.s_addr ==
 	    ((struct sockaddr_in *)&localAddr)->sin_addr.s_addr) {
 	    if (device.empty()) {
-                device = p->name; exist = true;
+                device = p->name;
             }
 	    if (!devMtu) devMtu = p->mtu;
 	}
-    }
-    freeDeviceInfo();
-    if (!exist)
-	throw ProbeException("device not exist");
 
+	if (!device.empty() && device == p->name) {
+	    exist = true;
+	    if (!devMtu) devMtu = p->mtu;
+            break;
+        }
+    }
+
+    if (!exist) {
+        freeDeviceInfo();
+	throw ProbeException("device not exist");
+    }
+
+    if (verbose > 1) p->print();  // the iface address maybe different from
+                                  // specified source address
+
+    // Determine whether the remote host and local host are in the
+    // same LAN
+    const uint32_t vlan = *((uint32_t *)&((struct sockaddr_in *)p->addr)->sin_addr) &
+                          *((uint32_t *)&((struct sockaddr_in *)p->netmask)->sin_addr);
+    
+    char strdst[INET_ADDRSTRLEN], strbrd[INET_ADDRSTRLEN], strvlan[INET_ADDRSTRLEN];
+
+    inet_ntop(AF_INET, (struct in_addr *)&vlan, strvlan, sizeof(strvlan));
+
+    inet_ntop(AF_INET, &((struct sockaddr_in *)p->brdaddr)->sin_addr,
+              strbrd, sizeof(strbrd));
+
+    inet_ntop(AF_INET, &((struct sockaddr_in *)&foreignAddr)->sin_addr,
+              strdst, sizeof(strdst));
+    
+    if (verbose > 2)
+        std::cerr << "strlan: " << strvlan << " "
+                  << "strbrd: " << strbrd << " "
+                  << "strdst: " << strdst << std::endl;
+
+    if (!(strcmp(strdst, strvlan) >= 0 &&
+          strcmp(strdst, strbrd) <= 0))
+        sameLan = false;
+    
 }
 

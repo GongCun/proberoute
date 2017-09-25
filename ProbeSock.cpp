@@ -253,14 +253,56 @@ int ProbeSock::recvIcmp(const u_char *buf, int len)
     return 0;
 }
     
+bool TcpProbeSock::capWrite(
+    const u_char *buf,
+    int len,
+    u_short sport,
+    u_short dport,
+    uint16_t& ipid,
+    uint32_t& seq,
+    uint32_t& ack
+) {
+    // Return:
+    //   true  - captured write()
+    //   false - haven't captured
+     const struct ip *ip;
+    const struct tcphdr *tcp;
+    int iplen, tcplen;
 
+    ip = (struct ip *)buf;
+    iplen = ip->ip_hl << 2;
+
+    if (iplen < PROBE_IP_LEN || ip->ip_p != IPPROTO_TCP)
+        return false;
+
+    if ((tcplen = len - iplen) < PROBE_TCP_LEN)
+        return false;
+    
+    tcp = (struct tcphdr *)(buf + iplen);
+    tcplen = tcp->th_off << 2;
+    if (tcplen < PROBE_TCP_LEN)
+        return false;
+
+    // obtain the write() packet after connection established
+    if (tcp->th_sport == htons(sport) &&
+        tcp->th_dport == htons(dport)) {
+        ipid = ntohs(ip->ip_id) + 1;
+        seq = ntohl(tcp->th_seq) + 1; // set out-of-order sequence
+        ack = ntohl(tcp->th_ack);
+        return true;
+    }
+
+    return false;
+    
+}
+
+   
 int TcpProbeSock::recvTcp(const u_char *buf, int len,
                           u_short sport, u_short dport)
 {
     //
     // Return:
     // 
-    //   -1 - captured write() packet
     //    0 - Packet too short or other
     //    1 - received RST packet
     //    2 - received non-RST packet
@@ -284,11 +326,6 @@ int TcpProbeSock::recvTcp(const u_char *buf, int len,
     if (tcplen < PROBE_TCP_LEN)
         return 0;
 
-    // obtain the write() packet after connection established
-    if (tcp->th_sport == htons(sport) &&
-        tcp->th_dport == htons(dport))
-        return -1;
-
     if (tcp->th_sport == htons(dport) &&
         tcp->th_dport == htons(sport) &&
         (ntohl(tcp->th_ack) == tcpseq + 1 || ntohl(tcp->th_seq) == tcpack))
@@ -297,3 +334,66 @@ int TcpProbeSock::recvTcp(const u_char *buf, int len,
     return 0;
 }
         
+int TcpProbeSock::nonbConn(int fd, const struct sockaddr *addr, socklen_t addrlen,
+                           int nsec, unsigned long msec)
+{
+    /* Return
+       -1: failed
+        0: success
+        1: connection refused
+        2: connection timed out
+    */
+
+    int flags;
+    int n;
+    int error;
+    socklen_t len;
+    fd_set rset, wset;
+    struct timeval tv;
+
+    if ((flags = fcntl(fd, F_GETFL, 0)) < 0)
+	return -1;
+    if (fcntl(fd, F_SETFL, flags | O_NONBLOCK) < 0)
+	return -1;
+
+    error = 0;
+    if ((n = connect(fd, addr, addrlen)) < 0 &&
+	errno != EINPROGRESS)
+	    return -1;            // host is down, no route to host, etc.
+
+    if (n == 0)
+	goto done;                // connect completed immediately
+
+    FD_ZERO(&rset);
+    FD_SET(fd, &rset);
+    wset = rset;
+    tv.tv_sec = nsec;
+    tv.tv_usec = msec * 1000;
+
+    if (select(fd + 1, &rset, &wset, NULL,
+               (nsec || msec) ? &tv : NULL) == 0) {
+	errno = ETIMEDOUT;
+	return 2;
+    }
+
+    if (FD_ISSET(fd, &rset) || FD_ISSET(fd, &wset)) {
+	len = sizeof(error);
+	if (getsockopt(fd, SOL_SOCKET, SO_ERROR, &error, &len) < 0) {
+	    return (errno == ECONNREFUSED) ? 1 : -1; // Solaris pending error
+	}
+    } else {
+        return -1;                // fd not set
+    }
+    
+done:
+    /* restore file status flags */
+    if (fcntl(fd, F_SETFL, flags) < 0)
+	return -1;
+	
+    if (error) {
+	errno = error;
+	return (errno == ECONNREFUSED) ? 1 : -1;
+    }
+	
+    return 0;                     // connection established
+}

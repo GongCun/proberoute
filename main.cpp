@@ -4,8 +4,8 @@
 
 sigjmp_buf jumpbuf;
 int verbose;
-int protocol;
-int sport;
+int protocol = IPPROTO_TCP;
+int srcport;
 const char *device;
 int nquery = 3;
 int waittime = 3;
@@ -16,15 +16,7 @@ int conn;
 int badsum, badlen;
 int echo, timestamp;
 const char *host, *service, *srcip;
-u_char flags;
-
-static void usage()
-{
-#define P(s) std::cerr << s << std::endl
-#include "usage.h"
-#undef P
-    exit(1);
-}
+u_char flags = TH_SYN;
 
 #define printOpt(x) std::cout << #x": " << x << std::endl
 
@@ -32,7 +24,7 @@ static void printOpts()
 {
     printOpt(verbose);
     printOpt(protocol);
-    printOpt(sport);
+    printOpt(srcport);
     printOpt(nullToEmpty(device));
     printOpt(nquery);
     printOpt(waittime);
@@ -53,10 +45,142 @@ static void printOpts()
 
 int main(int argc, char *argv[])
 {
-    if (parseOpt(argc, argv) < 0)
-        usage();
+    const int on = 1;
+    int connfd = -1;
+    std::string msg;
+    struct linger linger;
+    int n;
+    socklen_t optlen;
+    int origttl = 0, ttl;
+    const u_char *ptr;
+    struct sockaddr_in *sinptr;
+    struct in_addr src, dst, lastrecv;
+    int caplen, len, iplen, packlen;
+    u_short sport, dport;
+
+
+    // make cout unbuffered
+    std::cout.setf(std::ios::unitbuf);
+
+    if (parseOpt(argc, argv, msg) < 0) {
+	if (!msg.empty())
+	    std::cerr << msg << std::endl;
+	std::cerr << "use -h to get help" << std::endl;
+	exit(1);
+    }
 
     printOpts();
+
+    try {
+	ProbeAddressInfo addressInfo(host, service, srcip, srcport, device, mtu);
+	std::cout << addressInfo << std::endl;
+
+        // addressInfo.getDeviceInfo();
+        // addressInfo.printDeviceInfo();
+        // addressInfo.freeDeviceInfo();
+
+        ProbePcap capture(addressInfo.getDevice().c_str(),
+                          "tcp or icmp[0:1] == 3 or icmp[0:1] == 11 or icmp[0:1] == 12");
+
+	switch (protocol) {
+	case IPPROTO_TCP:
+	    if (conn && !addressInfo.isSameLan()) { // no need use connect probe
+		if ((connfd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
+		    throw ProbeException("socket");
+
+		linger.l_onoff = 1, linger.l_linger = 0;
+		if (setsockopt(connfd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)) < 0)
+		    throw ProbeException("setsockopt SO_REUSEADDR");
+#ifdef SO_REUSEPORT
+		if (setsockopt(connfd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)) < 0)
+		    throw ProbeException("setsockopt SO_REUSEPORT");
+#endif
+		if (bind(connfd, addressInfo.getLocalSockaddr(),
+			 addressInfo.getLocalSockaddrLen()) < 0)
+		    throw ProbeException("bind");
+
+		n = TcpProbeSock::nonbConn(connfd, addressInfo.getForeignSockaddr(),
+					   addressInfo.getForeignSockaddrLen(), waittime, 0);
+
+		if (verbose > 1)
+		    std::cerr << "nonbConn() returns " << n << " ("
+			      << (n < 0 ? "failed" :
+                                  n == 0 ? "succeed" :
+                                  n == 1 ? "refused" :
+                                  n == 2 ? "timed out" : "unknown state")
+			      << ")" << std::endl;
+
+		if (n == 0) {
+		    // Capture the write() packet, then set the seq & ack.  To avoid
+		    // the write() packet arriving to remote host, we need to set the
+		    // TTL to 1.
+
+                    optlen = sizeof(origttl);
+                    if (getsockopt(connfd, IPPROTO_IP, IP_TTL, &origttl, &optlen) < 0)
+                        throw ProbeException("getsockopt IP_TTL");
+
+                    ttl = 1;
+                    if (setsockopt(connfd, IPPROTO_IP, IP_TTL, &ttl, sizeof(ttl)) < 0)
+                        throw ProbeException("setsockopt IP_TTL");
+
+                    if (write(connfd, "\xa5", 1) != 1)
+                        throw ProbeException("write");
+                        
+                    // capture the write() packet immediately or when it retransmit
+                    uint16_t ipid = 0;
+                    uint32_t seq = 0, ack = 0;
+                    sinptr = (struct sockaddr_in *)addressInfo.getLocalSockaddr();
+                    src = sinptr->sin_addr;
+                    sport = ntohs(sinptr->sin_port);
+
+                    sinptr = (struct sockaddr_in *)addressInfo.getForeignSockaddr();
+                    dst = sinptr->sin_addr;
+                    dport = ntohs(sinptr->sin_port);
+	
+                    for ( ; ; ) {
+                        ptr = capture.nextPcap(&caplen);
+                        assert(ptr);
+                        if (TcpProbeSock::capWrite(
+                                ptr,
+                                caplen,
+                                sport,
+                                dport,
+                                ipid,
+                                seq,
+                                ack
+                            ))
+                            break;
+                    }
+                    if (verbose > 2)
+                        std::cerr << "assign ipid " << ipid
+                                  << " seq " << seq
+                                  << " ack " << ack << std::endl;
+                    
+                    
+		}
+		else if (n > 0) {
+		    // connection refused or timed out
+		    if (verbose)
+			std::cerr << "can't connect to " << host
+                                  << " (" << service <<")"
+                                  << std::endl;
+		}
+		else {
+                    close(connfd);
+		    throw ProbeException("nonbConn");
+                }
+                		
+	    }
+	    break;                // IPPROTO_TCP
+	default:
+	    std::cerr << "unknown protocol: " << protocol << std::endl;
+	    exit(1);
+	} // case PROTOCOL
+    } catch (ProbeException &e) {
+	std::cerr << e.what() << std::endl;
+	exit(1);
+    }
+
 
     return 0;
 
@@ -65,9 +189,6 @@ int main(int argc, char *argv[])
 	if (argc != 3)
 	    throw ProbeException("Usage: proberoute <host> <service>");
 
-	ProbeAddressInfo addressInfo(argv[1], argv[2]);
-    
-	std::cout << addressInfo << std::endl;
 
 	u_char buf[MAX_MTU];
 	memset(buf, 0xa5, sizeof(buf)); // just pad pattern
@@ -176,9 +297,6 @@ int main(int argc, char *argv[])
 
 
 
-        // addressInfo.getDeviceInfo();
-        // addressInfo.printDeviceInfo();
-        // addressInfo.freeDeviceInfo();
         // std::cout << "clear\n";
         // addressInfo.printDeviceInfo();
 

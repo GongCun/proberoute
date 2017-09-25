@@ -2,18 +2,28 @@
 #include <popt.h>
 
 // don't start from zero
-enum { OPT_PROTO = 1000, OPT_SERV, OPT_DEV, OPT_SRCIP,
-       OPT_SYN, OPT_ACK, OPT_NULL, OPT_FIN, OPT_XMAS = 9000 };
+enum { OPT_HELP = 1000, OPT_PROTO, OPT_SERV, OPT_DEV, OPT_SRCIP,
+       OPT_SYN, OPT_ACK, OPT_NULL, OPT_FIN, OPT_XMAS };
+
+static void usage()
+{
+#define P(s) std::cerr << s << std::endl
+#include "usage.h"
+#undef P
+    exit(1);
+}
+
 
 static struct poptOption po[] = {
     // longName, shortName, argInfo, argPtr, value, descrip, argDesc
-    { "verbose",      'v',  POPT_ARG_VAL,    &verbose,   1,            NULL, NULL },
+    { "verbose",      'v',  POPT_ARG_NONE,   0,          'v',          NULL, NULL },
+    { "help",         'h',  POPT_ARG_NONE,   0,          OPT_HELP,     NULL, NULL },
     { NULL,           'P',  POPT_ARG_STRING, 0,          OPT_PROTO,    NULL, NULL },
     { "tcp",          '\0', POPT_ARG_VAL,    &protocol,  IPPROTO_TCP,  NULL, NULL },
     { "udp",          '\0', POPT_ARG_VAL,    &protocol,  IPPROTO_UDP,  NULL, NULL },
     { "icmp",         '\0', POPT_ARG_VAL,    &protocol,  IPPROTO_ICMP, NULL, NULL },
     { "port",         'p',  POPT_ARG_STRING, 0,          OPT_SERV,     NULL, NULL },
-    { "source-port",  'g',  POPT_ARG_INT,    &sport,     0,            NULL, NULL },
+    { "source-port",  'g',  POPT_ARG_INT,    &srcport,   0,            NULL, NULL },
     { "source-ip",    'S',  POPT_ARG_STRING, 0,          OPT_SRCIP,    NULL, NULL },
     { NULL,           'i',  POPT_ARG_STRING, 0,          OPT_DEV,      NULL, NULL },
     { NULL,           'q',  POPT_ARG_INT,    &nquery,    0,            NULL, NULL },
@@ -36,14 +46,14 @@ static struct poptOption po[] = {
 };
 
 
-int parseOpt(int argc, char **argv)
+int parseOpt(int argc, char **argv, std::string& msg)
 {
     const char *arg;
     poptContext pc;
     int opt;
 
     if (argc < 2)
-        return -1;
+	usage();
 
     pc = poptGetContext(NULL, argc, (const char **)argv, po, 0);
 
@@ -57,8 +67,11 @@ int parseOpt(int argc, char **argv)
                 protocol = IPPROTO_UDP;
             else if (!strcmp(arg, "ICMP"))
                 protocol = IPPROTO_ICMP;
-            else
-                return -1;
+            else {
+		msg = "unknown protocol: ";
+		msg += arg;
+		return -1;
+	    }
             break;
 
         case OPT_SRCIP:
@@ -93,20 +106,28 @@ int parseOpt(int argc, char **argv)
 	    flags = TH_FIN | TH_PUSH | TH_URG;
 	    break;
 
+	case OPT_HELP:
+	    usage();
+
+	case 'v':
+	    verbose++;
+	    break;
+
 	default:
+	    msg = poptBadOption(pc, POPT_BADOPTION_NOALIAS);
+	    msg += ": ";
+	    msg += poptStrerror(opt);
             return -1;
 	}
 
-    if ((host = poptGetArg(pc)) == NULL)
+    if ((host = poptGetArg(pc)) == NULL) {
+	msg = "missing host argument";
         return -1;
+    }
 
     if (poptPeekArg(pc) != NULL)
         service = poptGetArg(pc);
 
     return 0;
 }
-
-abcd = longlonglong + longlonglong;
-
-    
     

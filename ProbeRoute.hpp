@@ -80,7 +80,7 @@
 extern sigjmp_buf jumpbuf;
 extern int verbose;
 extern int protocol;
-extern int sport;
+extern int srcport;
 extern const char *device;
 extern int nquery;
 extern int waittime;
@@ -175,6 +175,7 @@ private:
     socklen_t localAddrLen, foreignAddrLen;
     std::string device;
     u_short devMtu;
+    bool sameLan;
 
     // the device information element
     struct deviceInfo {
@@ -191,8 +192,10 @@ private:
 	~deviceInfo() {
 	    safeFree(addr); safeFree(brdaddr); safeFree(netmask);
 	}
+
+        void print();
     };
- 
+
 public:
     // Make a socket address for the given host and service or port;
     // Set the local address from given arguments or use connect() to
@@ -225,13 +228,16 @@ public:
     int getDevMtu() const {
         return devMtu;
     }
-   
 
+    bool isSameLan() const {
+        return sameLan;
+    }
+            
     struct deviceInfo *deviceInfoList; // the entry of device linked list
     void getDeviceInfo() throw(ProbeException);
     void freeDeviceInfo();
     void printDeviceInfo();
-
+ 
 };
 
 inline std::ostream& operator<<(std::ostream &output,
@@ -248,7 +254,8 @@ inline std::ostream& operator<<(std::ostream &output,
     output << "foreign: " << inet_ntoa(faddr->sin_addr) << ":" << ntohs(faddr->sin_port)
            << std::endl;
     output << "device: " << address.device << std::endl;
-    output << "mtu: " << address.devMtu;
+    output << "mtu: " << address.devMtu << std::endl;
+    output << (address.sameLan ? "in the same lan" : "not in the same lan");
 
     return output;
 }
@@ -380,8 +387,21 @@ public:
 			    u_short sport, u_short dport);
 
     int recvTcp(const u_char *buf, int len,
-                u_short sport = 0, u_short dport = 0);
+                u_short sport, u_short dport);
 
+    static bool capWrite(
+        const u_char *buf,
+        int len,
+        u_short sport,
+        u_short dport,
+        uint16_t& ipid,
+        uint32_t& seq,
+        uint32_t& ack
+    );
+
+    static int nonbConn(int fd, const struct sockaddr *addr, socklen_t addrlen,
+			int nsec, unsigned long msec);
+    
     
     int getTcphdrLen() {
 	return tcphdrLen;
@@ -430,7 +450,7 @@ inline std::ostream& operator<<(std::ostream& output,
     return output;
 }
 
-int parseOpt(int argc, char **argv);
+int parseOpt(int argc, char **argv, std::string&);
 
 #endif
 
