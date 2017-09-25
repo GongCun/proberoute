@@ -146,6 +146,10 @@ int main(int argc, char *argv[])
 
                     if (write(connfd, "\xa5", 1) != 1)
                         throw ProbeException("write");
+
+		    std::cerr << "origttl: " << origttl << std::endl;
+		    if (setsockopt(connfd, IPPROTO_IP, IP_TTL, &origttl, sizeof(origttl)) < 0)
+			throw ProbeException("setsockopt IP_TTL");
                         
                     // capture the write() packet immediately or when it retransmit
                     for ( ; ; ) {
@@ -166,6 +170,7 @@ int main(int argc, char *argv[])
                             ))
                             break;
                     }
+		    std::cerr << "break\n";
                     if (verbose > 2) {
                         std::cerr << "captured ipid: " << ipid
                                   << " seq: " << seq
@@ -198,7 +203,6 @@ int main(int argc, char *argv[])
                     close(connfd);
 		    throw ProbeException("nonbConn");
                 }
-                		
 	    }
 
 	    // 
@@ -294,6 +298,7 @@ int main(int argc, char *argv[])
 			probe->recvTcp(ptr, caplen, sport, dport) > 0)
 			break;
 		}
+		alarm(0);
 
 		if ((rtt = delta(&tv)) < 0)
 		    throw ProbeException("delta");
@@ -312,8 +317,10 @@ int main(int argc, char *argv[])
 	    if (found) break;
 	}
 
-	if (connfd >= 0)
+	std::cerr << "finished\n";
+	if (connfd >= 0) {
 	    close(connfd);
+	}
 	
     } catch (ProbeException &e) {
 	std::cerr << e.what() << std::endl;
