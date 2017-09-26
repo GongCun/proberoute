@@ -84,7 +84,6 @@ int ProbeSock::buildIpHeader(u_char *buf, int protoLen, u_char ttl, u_short flag
 }
 
 
-
 ssize_t ProbeSock::sendPacket(const void *buf, size_t buflen, int flags, const struct sockaddr *to, socklen_t tolen)
     throw(ProbeException)
 {
@@ -121,7 +120,9 @@ int ProbeSock::sendFragPacket(const u_char *tcpbuf, const int packlen,
 
         iplen = buildIpHeader(buf, sendlen, ttl, flags);
 	memcpy(buf + iplen, ptr, sendlen);
-	sendPacket(buf, iplen + sendlen, 0, to, tolen);
+	// The ICMP data on AIX can't be less than 8 bytes, so pad at
+	// least 8 bytes.
+	sendPacket(buf, iplen + (sendlen < 8 ? 8 : sendlen), 0, to, tolen);
 	offset += sendlen;
 	remlen -= sendlen;
 	ptr += sendlen;
@@ -302,7 +303,7 @@ bool TcpProbeSock::capWrite(
     // Return:
     //   true  - captured write()
     //   false - haven't captured
-     const struct ip *ip;
+    const struct ip *ip;
     const struct tcphdr *tcp;
     int iplen, tcplen;
 
@@ -507,5 +508,70 @@ int UdpProbeSock::buildProtocolPacket(
     assert(udplen == PROBE_UDP_LEN);
 
     return iphdrLen + protoLen;	// total packet length
+}
+
+int IcmpProbeSock::buildProtocolHeader(
+    u_char *buf,
+    int protoLen,
+    u_short sport,
+    u_short dport,
+    u_char flags,
+    bool badsum
+) {
+    struct icmp *icmp;
+    uint32_t sum = 0;
+    struct timeval tvorig;
+    uint32_t tsorig;
+
+    assert(protoLen >= icmphdrLen);
+    bzero(buf, icmphdrLen);
+    icmp = (struct icmp *)buf;
+
+    icmp->icmp_type = flags;
+    icmp->icmp_code = 0;
+    icmp->icmp_cksum = 0;	  // calculate later
+    icmp->icmp_id = htons(icmpId);
+    icmp->icmp_seq = htons(icmpSeq);
+
+    if (flags == ICMP_TSTAMP) {
+	if (gettimeofday(&tvorig, (struct timezone *)NULL) < 0) {
+	    perror("gettimeofday");
+	    exit(1);
+	}
+	tsorig = tvorig.tv_sec % (24 * 60 * 60) * 1000 + tvorig.tv_usec / 1000;
+	icmp->icmp_otime = htonl(tsorig);
+	icmp->icmp_rtime = icmp->icmp_ttime = 0;
+    }
+
+    if (badsum) {
+        srand(time(0));
+        icmp->icmp_cksum = rand() & 0xffff;
+    } else {
+	sum = in_checksum((uint16_t *)icmp, protoLen);
+        icmp->icmp_cksum = CKSUM_CARRY(sum);
+    }
+
+    return icmphdrLen;
+}
+
+int IcmpProbeSock::buildProtocolPacket(
+    u_char *buf,
+    int protoLen,
+    u_char ttl,
+    u_short flagFrag,
+    u_short sport,
+    u_short dport,
+    u_char flags,
+    bool badsum
+) {
+    int iplen, icmplen;
+
+    iplen = buildIpHeader(buf, protoLen, ttl, flagFrag);
+    assert(iplen == iphdrLen);
+	
+    icmplen = buildProtocolHeader(buf + iplen, protoLen, sport, dport, flags, badsum);
+    assert(icmplen == icmphdrLen);
+
+    return iphdrLen + protoLen;	  // total packet length
 }
 
