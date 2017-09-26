@@ -149,7 +149,8 @@ int TcpProbeSock::buildProtocolHeader(u_char *buf, int protoLen, u_short sport, 
     tcp->th_x2 = 0;
     tcp->th_off = tcphdrLen >> 2;
     tcp->th_flags = flags;
-    tcp->th_urp = 0;              // urgent pointer
+    tcp->th_urp = (flags & TH_URG && protoLen - tcphdrLen) ?
+                  htons(1) : 0;   // urgent pointer
     tcp->th_win = htons(MAX_MTU); // default 65535
     tcp->th_sum = 0;              // calculate later
 
@@ -191,6 +192,28 @@ int TcpProbeSock::buildProtocolPacket(u_char *buf, int protoLen, u_char ttl, u_s
     return iphdrLen + protoLen;	// total packet length
 }
 
+// Guess next MTUs
+static int mtus[] = {
+    65535,
+    17914,
+    8166,
+    4464,
+    4352,
+    2048,
+    2002,
+    1536,
+    1500,
+    1492,
+    1006,
+    576,
+    552,
+    544,
+    512,
+    508,
+    296,
+    68,
+    0
+};
 
 int ProbeSock::recvIcmp(const u_char *buf, int len)
 {
@@ -207,6 +230,8 @@ int ProbeSock::recvIcmp(const u_char *buf, int len)
     const struct icmp *icmp;
     u_char type, code;
     int iplen, icmplen, origiplen;
+    static int *mtuptr = mtus;
+    
 
     ip = (struct ip *)buf;
     iplen = ip->ip_hl << 2;
@@ -246,6 +271,18 @@ int ProbeSock::recvIcmp(const u_char *buf, int len)
 #else
             pmtu = ntohs(((struct my_pmtu *)&icmp->icmp_void)->ipm_nextmtu);
 #endif
+            if (pmtu) {
+                for ( ; *mtuptr >= pmtu; ++mtuptr) ;
+                // std::cerr << "next mtu: " << *mtuptr << std::endl;
+            }
+            else
+                pmtu = *mtuptr++;
+            
+            if (verbose)
+                std::cerr << " !F (next MTU = " << pmtu << ")";
+            else
+                std::cerr << " !F";
+            
         }
 
         return ((type == ICMP_TIMXCEED) ? -1 : code + 1);
@@ -340,9 +377,18 @@ int TcpProbeSock::recvTcp(const u_char *buf, int len,
     if (tcplen < PROBE_TCP_LEN)
         return 0;
 
+    // TCP RFC 793 (Page 65) 
     if (tcp->th_sport == htons(dport) &&
         tcp->th_dport == htons(sport) &&
-        (ntohl(tcp->th_ack) == tcpseq + 1 || ntohl(tcp->th_seq) == tcpack))
+        (
+	    // send SYN packet when state is listen
+	    ntohl(tcp->th_ack) == tcpseq + 1 ||
+	    // send non-SYN packet with out-of-order SEQ or any ACK
+	    // when state is closed/listen 
+	    (ntohl(tcp->th_seq) == tcpack && tcp->th_flags & TH_RST) ||
+	    // send out-of-order SEQ when state is established
+	    (ntohl(tcp->th_ack) == tcpseq - 1)
+	))
         return (tcp->th_flags & TH_RST) ? 1 : 2;
 
     return 0;
