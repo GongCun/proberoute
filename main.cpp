@@ -73,7 +73,7 @@ int main(int argc, char *argv[])
     u_char buf[MAX_MTU];
     u_char tcpopt[TCP_OPT_LEN], ipopt[IP_OPT_LEN];
     bool found = false, unreachable = false;
-    int code;
+    int code = 0, tcpcode = 0;
     TcpProbeSock *probe;
 
     // make std::cout and stdout unbuffered
@@ -331,11 +331,13 @@ int main(int argc, char *argv[])
 		    continue;
 		}
 
+		code = tcpcode = 0;
+
 		for ( ; ; ) {
 		    ptr = capture.nextPcap(&caplen);
 		    assert(ptr != NULL);
 		    if ((code = probe->recvIcmp(ptr, caplen)) ||
-			probe->recvTcp(ptr, caplen, sport, dport))
+			(tcpcode = probe->recvTcp(ptr, caplen, sport, dport)))
 			break;
 		}
 		alarm(0);
@@ -435,7 +437,33 @@ int main(int argc, char *argv[])
 		    found = true;
 	    }
 	    std::cout << std::endl;
-	    if (found || unreachable) break;
+
+	    if (found || unreachable) {
+		if (protocol == IPPROTO_TCP) {
+		    if (connfd >= 0)
+			std::cout << "Port " << dport << " open" << std::endl;
+		    else if (conn)
+			std::cout << "Port " << dport << " closed" << std::endl;
+		    else {
+			switch (tcpcode) {
+			case 1:
+			    if (flags == TH_SYN)
+				std::cout << "Port " << dport << " closed" << std::endl;
+			    else
+				std::cout << "Port " << dport << " closed/filtered" << std::endl;
+			    break;
+
+			case 2:
+			    std::cout << "Port " << dport << " open" << std::endl;
+			    break;
+
+			default:
+			    ;
+			}
+		    }
+		}
+		break;
+	    }
 	}
 
 
