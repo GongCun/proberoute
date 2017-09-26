@@ -264,7 +264,19 @@ int main(int argc, char *argv[])
 		}
 	    }
 
-	    break;                // IPPROTO_TCP
+	    break;                // case IPPROTO_TCP
+
+	case IPPROTO_UDP:
+	    if (badlen)
+		probe = new UdpProbeSock(mtu, src, dst, 4);
+	    else
+		probe = new UdpProbeSock(mtu, src, dst);
+
+	    if (verbose > 2)
+		std::cout << *probe << std::endl;
+
+	    break;		  // case IPPROTO_UDP
+		
 	default:
 	    std::cerr << "unknown protocol: " << protocol << std::endl;
 	    exit(1);
