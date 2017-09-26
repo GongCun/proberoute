@@ -290,15 +290,21 @@ int main(int argc, char *argv[])
 
 	bzero(buf, sizeof(buf));
 
-	for (ttl = firstttl; ttl < maxttl; ++ttl) {
+	for (ttl = firstttl;
+	     ttl < maxttl;
+	     // the original traceroute(1) increments the destination UDP port 
+	     ++ttl, (protocol == IPPROTO_UDP && !service) ? ++dport : dport) {
             std::printf("%3d ", ttl);
 	    for (i = 0; i < nquery; i++) {
 		if (gettimeofday(&tv, NULL) < 0)
 		    throw ProbeException("gettimeofday");
 
-                packlen = (flags == TH_SYN) ?
-                          probe->getProtocolHdrLen() :
-                          probe->getPmtu() - probe->getIphdrLen();
+		if (protocol == IPPROTO_TCP)
+		    packlen = (flags == TH_SYN) ?
+			      probe->getProtocolHdrLen() :
+			      probe->getPmtu() - probe->getIphdrLen();
+		else
+		    packlen = probe->getPmtu() - probe->getIphdrLen();
 
                 if (fragsize)
                     probe->buildProtocolHeader(
