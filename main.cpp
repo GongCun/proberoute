@@ -14,7 +14,6 @@ int fragsize;
 int mtu;
 int conn;
 int badsum, badlen;
-int echo, timestamp;
 const char *host, *service, *srcip;
 u_char flags = TH_SYN;
 
@@ -44,8 +43,6 @@ static void printOpts()
     printOpt(conn);
     printOpt(badsum);
     printOpt(badlen);
-    printOpt(echo);
-    printOpt(timestamp);
     printOpt(nullToEmpty(host));
     printOpt(nullToEmpty(service));
     printOpt(nullToEmpty(srcip));
@@ -257,11 +254,10 @@ int main(int argc, char *argv[])
 	    }
 
 	    if (verbose > 2) {
-		if (TcpProbeSock *tcpProbe = dynamic_cast<TcpProbeSock *>(probe)) {
+		if (TcpProbeSock *tcpProbe = dynamic_cast<TcpProbeSock *>(probe))
 		    std::cout << *tcpProbe << std::endl;
-		} else {
-		    throw std::bad_cast("bad cast from ProbeSock to TcpProbeSock");
-		}
+		else
+		    throw std::bad_cast();
 	    }
 
 	    break;                // case IPPROTO_TCP
@@ -276,6 +272,21 @@ int main(int argc, char *argv[])
 		std::cout << *probe << std::endl;
 
 	    break;		  // case IPPROTO_UDP
+
+	case IPPROTO_ICMP:
+	    if (badlen)
+		probe = new IcmpProbeSock(mtu, src, dst, flags, 4);
+	    else
+		probe = new IcmpProbeSock(mtu, src, dst, flags);
+
+	    if (verbose > 2) {
+		if (IcmpProbeSock *icmpProbe = dynamic_cast<IcmpProbeSock *>(probe))
+		    std::cout << *icmpProbe << std::endl;
+		else 
+		    throw std::bad_cast();
+	    }
+
+	    break;		  // case IPPROTO_ICMP
 		
 	default:
 	    std::cerr << "unknown protocol: " << protocol << std::endl;
@@ -293,7 +304,13 @@ int main(int argc, char *argv[])
 	for (ttl = firstttl;
 	     ttl < maxttl;
 	     // the original traceroute(1) increments the destination UDP port 
-	     ++ttl, (protocol == IPPROTO_UDP && !service) ? ++dport : dport) {
+	     ++ttl, (protocol == IPPROTO_UDP && !service) ? ++dport : 
+		   ({
+		       if (protocol == IPPROTO_ICMP)
+			   (dynamic_cast<IcmpProbeSock *>(probe))->incrIcmpSeq();
+		       dport;
+		   })
+	) {
             std::printf("%3d ", ttl);
 	    for (i = 0; i < nquery; i++) {
 		if (gettimeofday(&tv, NULL) < 0)
@@ -367,7 +384,7 @@ int main(int argc, char *argv[])
 			    if (tcpcode = tcpProbe->recvTcp(ptr, caplen, sport, dport))
 				break;
 			} else {
-			    throw std::bad_cast("bad cast from ProbeSock to TcpProbeSock");
+			    throw std::bad_cast();
 			}
 		    }
 		}
