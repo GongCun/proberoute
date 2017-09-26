@@ -89,7 +89,6 @@ extern int fragsize;
 extern int mtu;
 extern int conn;
 extern int badsum, badlen;
-extern int echo, timestamp;
 extern const char *host, *service, *srcip;
 extern u_char flags;
 
@@ -337,7 +336,7 @@ public:
 	bool badsum = false
     ) = 0;
 
-    int recvIcmp(const u_char *buf, int len);
+    virtual int recvIcmp(const u_char *buf, int len);
 
     int getIphdrLen() const {
 	return iphdrLen;
@@ -368,6 +367,69 @@ protected:
     };
 #endif
 }; // class ProbeSock
+
+class IcmpProbeSock: public ProbeSock {
+
+    friend std::ostream& operator<<(std::ostream& output,
+                                    const IcmpProbeSock& probe);
+
+private:
+    u_char icmpType;
+    int icmphdrLen;
+    u_short icmpId;
+    u_short icmpSeq;
+
+public:
+    IcmpProbeSock(
+	u_short mtu,
+	struct in_addr src,
+	struct in_addr dst,
+	u_char flags = ICMP_ECHO, // ICMP_ECHO or ICMP_TSTAMP
+	int iplen = 0,
+	u_char *ipbuf = NULL
+    ): ProbeSock(IPPROTO_ICMP, mtu, src, dst, iplen, ipbuf),
+       icmpType(flags),
+       icmphdrLen(flags == ICMP_TSTAMP ? 20 : 8),
+       icmpId(getpid() & 0xffff),
+       icmpSeq(0) {
+    }
+    
+    // use the base class destructor
+    
+    int buildProtocolHeader(
+	u_char *buf,
+	int protoLen,
+	u_short sport,
+	u_short dport,
+	u_char flags,
+	bool badsum
+    );
+
+    int buildProtocolPacket(
+	u_char *buf,
+	int protoLen,
+	u_char ttl,
+	u_short flagFrag,
+	u_short sport,
+	u_short dport,
+	u_char flags,
+	bool badsum
+    );
+
+    int getProtocolHdrLen() const {
+	return icmphdrLen;
+    }
+
+    int getIcmpSeq() const {
+	return icmpSeq;
+    }
+
+    void incrIcmpSeq() {
+	++icmpSeq;
+    }
+
+    virtual int recvIcmp(const u_char *buf, int len);
+}; // class IcmpProbeSock
 
 class UdpProbeSock: public ProbeSock {
 public:
@@ -529,7 +591,20 @@ inline std::ostream& operator<<(std::ostream& output,
     return output;
 }
 
+inline std::ostream& operator<<(std::ostream& output,
+				const IcmpProbeSock& probe)
+{
+    output << (const ProbeSock &)probe << std::endl;
+    
+    output << "icmpType: " << probe.icmpType << std::endl;
+    output << "icmphdrLen: " << probe.icmphdrLen << std::endl;
+    output << "icmpId: " << probe.icmpId << std::endl;
+    output << "icmpSeq: " << probe.icmpSeq;
+
+    return output;
+}
+
+
 int parseOpt(int argc, char **argv, std::string&);
 
 #endif
-
