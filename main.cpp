@@ -323,6 +323,9 @@ int main(int argc, char *argv[])
 		else
 		    packlen = probe->getPmtu() - probe->getIphdrLen();
 
+                if (packlen < probe->getProtocolHdrLen())
+                    throw ProbeException("packet length too short", MSG);
+
                 if (fragsize)
                     probe->buildProtocolHeader(
                         buf,
