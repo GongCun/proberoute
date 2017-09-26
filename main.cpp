@@ -425,6 +425,7 @@ int main(int argc, char *argv[])
 			case 4:	  // ICMP_UNREACH_NEEDFRAG
 			    ss << "Need fragment (next MTU = " << probe->getPmtu() << ")";
 			    s = verbose ? ss.str() : "!F";
+                            unreachable = false;
 			    break;
 
 			case 5:	  // ICMP_UNREACH_SRCFAIL
