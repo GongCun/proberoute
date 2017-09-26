@@ -75,7 +75,6 @@ int main(int argc, char *argv[])
     bool found = false, unreachable = false;
     int code = 0, tcpcode = 0;
 
-    // ProbeSock *baseProbe;
     ProbeSock *probe;
 
     // make std::cout and stdout unbuffered
@@ -229,7 +228,6 @@ int main(int argc, char *argv[])
                 tcplen = 0;
 
 	    if (badlen) {
-		// baseProbe = new TcpProbeSock(
 		probe = new TcpProbeSock(
 		    mtu,
 		    src,
@@ -244,7 +242,6 @@ int main(int argc, char *argv[])
 		);
 	    }
 	    else {
-		// baseProbe = new TcpProbeSock(
 		probe = new TcpProbeSock(
 		    mtu,
 		    src,
@@ -259,9 +256,13 @@ int main(int argc, char *argv[])
 		);
 	    }
 
-	    if (verbose > 2)
-		// std::cout << *baseProbe << std::endl << std::endl;
-		std::cout << *probe << std::endl << std::endl;
+	    if (verbose > 2) {
+		if (TcpProbeSock *tcpProbe = dynamic_cast<TcpProbeSock *>(probe)) {
+		    std::cout << *tcpProbe << std::endl;
+		} else {
+		    throw std::bad_cast("bad cast from ProbeSock to TcpProbeSock");
+		}
+	    }
 
 	    break;                // IPPROTO_TCP
 	default:
@@ -276,8 +277,6 @@ int main(int argc, char *argv[])
                           "tcp or icmp[0:1] == 3 or icmp[0:1] == 11 or icmp[0:1] == 12");
 
 	bzero(buf, sizeof(buf));
-
-	// TcpProbeSock *probe = dynamic_cast<TcpProbeSock *>(baseProbe);
 
 	for (ttl = firstttl; ttl < maxttl; ++ttl) {
             std::printf("%3d ", ttl);
@@ -479,7 +478,6 @@ int main(int argc, char *argv[])
 		break;
 	    }
 	}
-
 
     } catch (ProbeException &e) {
 	std::cerr << e.what() << std::endl;
