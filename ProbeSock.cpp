@@ -452,3 +452,60 @@ done:
 	
     return 0;                     // connection established
 }
+
+
+int UdpProbeSock::buildProtocolHeader(
+    u_char *buf,
+    int protoLen,
+    u_short sport,
+    u_short dport,
+    u_char flags,
+    bool badsum
+) {
+    struct udphdr *udp;
+    uint32_t sum = 0;
+
+    assert(protoLen >= PROBE_UDP_LEN);
+    bzero(buf, PROBE_UDP_LEN);
+    udp = (struct udphdr *)buf;
+
+    udp->uh_sport = htons(sport);
+    udp->uh_dport = htons(dport);
+    udp->uh_ulen = htons(protoLen);
+    udp->uh_sum = 0;              // calculate later
+
+    if (badsum) {
+        srand(time(0));
+        udp->uh_sum = rand() & 0xffff;
+    } else {
+	sum = in_checksum((uint16_t *)&srcAddr, 4);
+	sum += in_checksum((uint16_t *)&dstAddr, 4);
+	sum += ntohs(IPPROTO_UDP + protoLen);
+	sum += in_checksum((uint16_t *)udp, protoLen);
+        udp->uh_sum = CKSUM_CARRY(sum);
+    }
+
+    return PROBE_UDP_LEN;
+}
+
+int UdpProbeSock::buildProtocolPacket(
+    u_char *buf,
+    int protoLen,
+    u_char ttl,
+    u_short flagFrag,
+    u_short sport,
+    u_short dport,
+    u_char flags,
+    bool badsum
+) {
+    int iplen, udplen;
+
+    iplen = buildIpHeader(buf, protoLen, ttl, flagFrag);
+    assert(iplen == iphdrLen);
+	
+    udplen = buildProtocolHeader(buf + iplen, protoLen, sport, dport, flags, badsum);
+    assert(udplen == PROBE_UDP_LEN);
+
+    return iphdrLen + protoLen;	// total packet length
+}
+
