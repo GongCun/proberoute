@@ -107,8 +107,6 @@ int main(int argc, char *argv[])
 
 	mtu = addressInfo.getDevMtu();
 		
-        ProbePcap capture(addressInfo.getDevice().c_str(),
-                          "tcp or icmp[0:1] == 3 or icmp[0:1] == 11 or icmp[0:1] == 12");
 
 	signal(SIGINT, sig_int);
 
@@ -151,6 +149,8 @@ int main(int argc, char *argv[])
 		    // the write() packet arriving to remote host, we need to set the
 		    // TTL to 1.
 
+		    ProbePcap capture(addressInfo.getDevice().c_str(), "tcp");
+
 		    std::cerr << "register atexit\n";
 		    if (atexit(Close) != 0)
 			throw ProbeException("atexit");
@@ -165,7 +165,7 @@ int main(int argc, char *argv[])
 
                     if (write(connfd, "\xa5", 1) != 1)
                         throw ProbeException("write");
-
+		    
                     // capture the write() packet immediately or when it retransmit
                     for ( ; ; ) {
                         ptr = capture.nextPcap(&caplen);
@@ -267,6 +267,9 @@ int main(int argc, char *argv[])
 	//
 	// Send the probe and obtain the router/host IP
 	// 
+        ProbePcap capture(addressInfo.getDevice().c_str(),
+                          "tcp or icmp[0:1] == 3 or icmp[0:1] == 11 or icmp[0:1] == 12");
+
 	bzero(buf, sizeof(buf));
 
 	for (ttl = firstttl; ttl < maxttl; ++ttl) {
