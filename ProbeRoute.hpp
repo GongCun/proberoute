@@ -343,6 +343,8 @@ public:
 	return iphdrLen;
     }
 
+    virtual int getProtocolHdrLen() const = 0;
+
     int getPmtu() const {
         return pmtu;
     }
@@ -442,7 +444,7 @@ public:
 			int nsec, unsigned long msec);
     
     
-    int getTcphdrLen() {
+    int getProtocolHdrLen() const {
 	return tcphdrLen;
     }
 
