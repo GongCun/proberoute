@@ -353,69 +353,69 @@ int main(int argc, char *argv[])
 		    unreachable = true; // means found for UDP when ICMP code is
 					// ICMP_UNREACH_PORT
 		    if (code == -2)
-			s = verbose ? " Bad IP length" : " !IP_HL";
+			s = verbose ? "Bad IP length" : "!IP_HL";
 		    else {
 			switch (--code) {
 			case 3:	  // ICMP_UNREACH_PORT
 			    if (ip->ip_ttl <= 1)
-				s = verbose ? " Port unreachable" : " !";
+				s = verbose ? "Port unreachable" : "!";
 			    break;
 
 			case 0:	  // ICMP_UNREACH_NET
-			    s = verbose ? " Net unreachable" : " !N";
+			    s = verbose ? "Net unreachable" : "!N";
 			    break;
 
 			case 2:	  // ICMP_UNREACH_PROTOCOL
-			    s = verbose ? " Protocol unreachable" : " !P";
+			    s = verbose ? "Protocol unreachable" : "!P";
 			    break;
 
 			case 4:	  // ICMP_UNREACH_NEEDFRAG
-			    ss << " Need fragment (next MTU = " << probe->getPmtu() << ")";
-			    s = verbose ? ss.str() : " !F";
+			    ss << "Need fragment (next MTU = " << probe->getPmtu() << ")";
+			    s = verbose ? ss.str() : "!F";
 			    break;
 
 			case 5:	  // ICMP_UNREACH_SRCFAIL
-			    s = verbose ? " Source route failed" : " !S";
+			    s = verbose ? "Source route failed" : "!S";
 			    break;
 
 			case 6:	  // ICMP_UNREACH_NET_UNKNOWN
-			    s = verbose ? " Unknown net" : " !U";
+			    s = verbose ? "Unknown net" : "!U";
 			    break;
 
 			case 7:	  // ICMP_UNREACH_HOST_UNKNOWN
-			    s = verbose ? " Unknown host" : " !W";
+			    s = verbose ? "Unknown host" : "!W";
 			    break;
 
 			case 8:	  // ICMP_UNREACH_ISOLATED
-			    s = verbose ? " Source route isolated" : " !I";
+			    s = verbose ? "Source route isolated" : "!I";
 			    break;
 
 			case 9:	  // ICMP_UNREACH_NET_PROHIB
-			    s = verbose ? " Admin prohibited net" : " !A";
+			    s = verbose ? "Admin prohibited net" : "!A";
 			    break;
 
 			case 10:  // ICMP_UNREACH_HOST_PROHIB
-			    s = verbose ? " Admin prohibited host" : " !Z";
+			    s = verbose ? "Admin prohibited host" : "!Z";
 			    break;
 
 			case 11:  // ICMP_UNREACH_TOSNET
-			    s = verbose ? " Bad tos for net" : " !Q";
+			    s = verbose ? "Bad tos for net" : "!Q";
 			    break;
 
 			case 12:  // ICMP_UNREACH_TOSHOST
-			    s = verbose ? " Bad tos for host" : " !T";
+			    s = verbose ? "Bad tos for host" : "!T";
 			    break;
 
 			case 13:  // ICMP_UNREACH_FILTER_PROHIB
-			    s = verbose ? " Admin prohibited filter" : " !X";
+			    s = verbose ? "Admin prohibited filter" : "!X";
 			    break;
 
 			case 14:  // ICMP_UNREACH_HOST_PRECEDENCE
-			    s = verbose ? " Host precedence violation" : " !V";
+			    s = verbose ? "Host precedence violation" : "!V";
 			    break;
 
 			case 15:  // ICMP_UNREACH_PRECEDENCE_CUTOFF
-			    s = verbose ? " Precedence cutoff" : " !C";
+			    s = verbose ? "Precedence cutoff" : "!C";
 			    break;
 
 			default:
@@ -426,7 +426,7 @@ int main(int argc, char *argv[])
 		    }
 		}
 			
-		std::printf("%s  %.3f ms", s.c_str(), rtt);
+		std::printf("%s%s  %.3f ms", s.empty() ? "" : "  ", s.c_str(), rtt);
                 
 		if (ip->ip_src.s_addr == dst.s_addr)
 		    found = true;
