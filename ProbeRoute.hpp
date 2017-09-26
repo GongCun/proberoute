@@ -369,6 +369,35 @@ protected:
 #endif
 }; // class ProbeSock
 
+class UdpProbeSock: public ProbeSock {
+public:
+    // use the base class constructor/destructor
+    
+    int getProtocolHdrLen() const {
+	return PROBE_UDP_LEN;
+    }
+
+    int buildProtocolHeader(
+	u_char *buf,
+	int protoLen,
+	u_short sport,
+	u_short dport,
+	u_char flags,
+	bool badsum
+    );
+
+    int buildProtocolPacket(
+	u_char *buf,
+	int protoLen,
+	u_char ttl,
+	u_short flagFrag,
+	u_short sport,
+	u_short dport,
+	u_char flags,
+	bool badsum
+    );
+} // class UdpProbeSock
+
 class TcpProbeSock: public ProbeSock {
     friend std::ostream& operator<<(std::ostream& output,
                                     const TcpProbeSock& probe);
