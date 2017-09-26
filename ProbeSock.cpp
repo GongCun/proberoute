@@ -575,3 +575,82 @@ int IcmpProbeSock::buildProtocolPacket(
     return iphdrLen + protoLen;	  // total packet length
 }
 
+int IcmpProbeSock::recvIcmp(const u_char *buf, int len)
+{
+    //
+    // Return:
+    //
+    //   -3 - ICMP echo or timestamp reply
+    //   -2 - ICMP_PARAMPROB
+    //   -1 - ICMP_TIMXCEED
+    //    0 - Packet too short or other
+    //   >0 - ICMP code + 1 (type = ICMP_UNREACH)
+    //   
+
+    const struct ip *ip, *origip;
+    const struct icmp *icmp;
+    u_char type, code;
+    int iplen, icmplen, origiplen;
+    static int *mtuptr = mtus;
+    
+
+    ip = (struct ip *)buf;
+    iplen = ip->ip_hl << 2;
+    if (iplen < PROBE_IP_LEN || ip->ip_p != IPPROTO_ICMP)
+        return 0;
+
+    if ((icmplen = len - iplen) < PROBE_ICMP_LEN)
+        return 0;
+
+
+    icmp = (struct icmp *)(buf + iplen);
+    type = icmp->icmp_type;
+    code = icmp->icmp_code;
+
+    if ((type == ICMP_TIMXCEED && code == ICMP_TIMXCEED_INTRANS) ||
+        type == ICMP_UNREACH ||
+	type == ICMP_PARAMPROB) {
+
+        origip = (struct ip *)(buf + iplen + PROBE_ICMP_LEN);
+        origiplen = origip->ip_hl << 2;
+
+        // ICMP header + Original IP header + First 8 bytes of data field
+        if (icmplen < PROBE_ICMP_LEN + origiplen + 8)
+            return 0;
+        
+        if (origip->ip_dst.s_addr != dstAddr.s_addr ||
+            origip->ip_id != htons(ipid))
+            return 0;
+
+        // IP header bad length
+        if (type == ICMP_PARAMPROB &&
+            *((u_char *)origip + 20) == 0x44)
+            return -2;
+
+        if (type == ICMP_UNREACH && code == ICMP_UNREACH_NEEDFRAG) {
+#ifdef HAVE_ICMP_NEXTMTU
+            pmtu = ntohs(icmp->icmp_nextmtu);
+#else
+            pmtu = ntohs(((struct my_pmtu *)&icmp->icmp_void)->ipm_nextmtu);
+#endif
+            if (pmtu) {
+                for ( ; *mtuptr >= pmtu; ++mtuptr) ;
+                // std::cerr << "next mtu: " << *mtuptr << std::endl;
+            }
+            else
+                pmtu = *mtuptr++;
+            
+        }
+
+        return ((type == ICMP_TIMXCEED) ? -1 : code + 1);
+    }
+    else if (type == ICMP_ECHOREPLY ||
+	     type == ICMP_TSTAMPREPLY) {
+	if (icmp->icmp_id == htons(icmpId) &&
+	    icmp->icmp_seq == htons(icmpSeq))
+	    return -3;
+    }
+
+    return 0;
+}
+ 
