@@ -273,6 +273,7 @@ public:
 #ifdef HAVE_PCAP_FREECODE
         pcap_freecode(&bpfCode);
 #endif
+	// std::cerr << "EXIT PCAP" << std::endl;
     }
     ProbePcap(const char *,
 	      const char *) throw(ProbeException);
@@ -320,9 +321,14 @@ public:
     virtual void buildProtocolPacket() = 0;
     int recvIcmp(const u_char *buf, int len);
 
-    int getIphdrLen() {
+    int getIphdrLen() const {
 	return iphdrLen;
     }
+
+    int getPmtu() const {
+        return pmtu;
+    }
+            
 
 protected:
     const int protocol;
