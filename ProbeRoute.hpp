@@ -371,7 +371,16 @@ protected:
 
 class UdpProbeSock: public ProbeSock {
 public:
-    // use the base class constructor/destructor
+    UdpProbeSock(
+	u_short mtu,
+	struct in_addr src,
+	struct in_addr dst,
+	int iplen = 0,
+	u_char *ipbuf = NULL
+    ): ProbeSock(IPPROTO_UDP, mtu, src, dst, iplen, ipbuf) {
+    }
+    
+    // use the base class destructor
     
     int getProtocolHdrLen() const {
 	return PROBE_UDP_LEN;
@@ -396,7 +405,7 @@ public:
 	u_char flags,
 	bool badsum
     );
-} // class UdpProbeSock
+}; // class UdpProbeSock
 
 class TcpProbeSock: public ProbeSock {
     friend std::ostream& operator<<(std::ostream& output,
