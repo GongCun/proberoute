@@ -278,11 +278,6 @@ int ProbeSock::recvIcmp(const u_char *buf, int len)
             else
                 pmtu = *mtuptr++;
             
-            if (verbose)
-                std::cerr << " !F (next MTU = " << pmtu << ")";
-            else
-                std::cerr << " !F";
-            
         }
 
         return ((type == ICMP_TIMXCEED) ? -1 : code + 1);
