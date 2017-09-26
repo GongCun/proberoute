@@ -66,14 +66,14 @@ int main(int argc, char *argv[])
     struct in_addr src, dst, lastrecv;
     struct timeval tv;
     double rtt;
-    int caplen, len, iplen, tcplen, packlen;
+    int caplen, len, iplen = 0, tcplen = 0, packlen;
     u_short sport, dport;
     uint16_t ipid = (u_short)time(0) & 0xffff;
     uint32_t seq = 0, ack = 0;
     u_char buf[MAX_MTU];
     u_char tcpopt[TCP_OPT_LEN], ipopt[IP_OPT_LEN];
-    bool found = false;
-
+    bool found = false, unreachable = false;
+    int code;
     TcpProbeSock *probe;
 
     // make std::cout and stdout unbuffered
@@ -223,6 +223,8 @@ int main(int argc, char *argv[])
 	    // 
 	    // Now we can build the TCP packet
 	    // 
+            if (fragsize)         // don't set tcp mss options
+                tcplen = 0;
 
 	    if (badlen) {
 		probe = new TcpProbeSock(
@@ -266,18 +268,26 @@ int main(int argc, char *argv[])
 	// Send the probe and obtain the router/host IP
 	// 
 	bzero(buf, sizeof(buf));
-	packlen = (flags == TH_SYN) ?
-		  probe->getTcphdrLen() :
-		  mtu - probe->getIphdrLen();
-
-	if (fragsize)
-	    probe->buildProtocolHeader(buf, packlen, sport, dport, flags, badsum);
 
 	for (ttl = firstttl; ttl < maxttl; ++ttl) {
-	    std::printf("%3d ", ttl);
+            std::printf("%3d ", ttl);
 	    for (i = 0; i < nquery; i++) {
 		if (gettimeofday(&tv, NULL) < 0)
 		    throw ProbeException("gettimeofday");
+
+                packlen = (flags == TH_SYN) ?
+                          probe->getTcphdrLen() :
+                          probe->getPmtu() - probe->getIphdrLen();
+
+                if (fragsize)
+                    probe->buildProtocolHeader(
+                        buf,
+                        packlen,
+                        sport,
+                        dport,
+                        flags,
+                        badsum
+                    );
 
 		if (fragsize)
 		    probe->sendFragPacket(
@@ -290,12 +300,24 @@ int main(int argc, char *argv[])
 		    );
 
 		else {
-                    
-		    len = probe->buildProtocolPacket(buf, packlen, ttl,
-						    IP_DF, sport, dport, flags, badsum);
-		    probe->sendPacket(buf, len, 0,
-				     addressInfo.getForeignSockaddr(),
-				     addressInfo.getForeignSockaddrLen());
+		    len = probe->buildProtocolPacket(
+                        buf,
+                        packlen,
+                        ttl,
+                        IP_DF,
+                        sport,
+                        dport,
+                        flags,
+                        badsum
+                    );
+
+		    probe->sendPacket(
+                        buf,
+                        len,
+                        0,
+                        addressInfo.getForeignSockaddr(),
+                        addressInfo.getForeignSockaddrLen()
+                    );
 		}
                 
 		alarm(waittime);
@@ -309,8 +331,8 @@ int main(int argc, char *argv[])
 		for ( ; ; ) {
 		    ptr = capture.nextPcap(&caplen);
 		    assert(ptr != NULL);
-		    if (probe->recvIcmp(ptr, caplen) ||
-			probe->recvTcp(ptr, caplen, sport, dport) > 0)
+		    if ((code = probe->recvIcmp(ptr, caplen)) ||
+			probe->recvTcp(ptr, caplen, sport, dport))
 			break;
 		}
 		alarm(0);
@@ -320,16 +342,97 @@ int main(int argc, char *argv[])
 		ip = (struct ip *)ptr;
 		if (memcmp(&ip->ip_src, &lastrecv, sizeof(struct in_addr)) ||
 		    i == 0) {
-		    std::cout << " " << inet_ntoa(ip->ip_src);
+                    std::printf("%s%s", i ? "\n     " : " ",
+                                inet_ntoa(ip->ip_src));
 		    lastrecv = ip->ip_src;
 		}
-		std::printf(" %.3f ms", rtt);
+
+		std::string s;
+		std::ostringstream ss;
+		if (code && code != -1) {
+		    unreachable = true; // means found for UDP when ICMP code is
+					// ICMP_UNREACH_PORT
+		    if (code == -2)
+			s = verbose ? " Bad IP length" : " !IP_HL";
+		    else {
+			switch (--code) {
+			case 3:	  // ICMP_UNREACH_PORT
+			    if (ip->ip_ttl <= 1)
+				s = verbose ? " Port unreachable" : " !";
+			    break;
+
+			case 0:	  // ICMP_UNREACH_NET
+			    s = verbose ? " Net unreachable" : " !N";
+			    break;
+
+			case 2:	  // ICMP_UNREACH_PROTOCOL
+			    s = verbose ? " Protocol unreachable" : " !P";
+			    break;
+
+			case 4:	  // ICMP_UNREACH_NEEDFRAG
+			    ss << " Need fragment (next MTU = " << probe->getPmtu() << ")";
+			    s = verbose ? ss.str() : " !F";
+			    break;
+
+			case 5:	  // ICMP_UNREACH_SRCFAIL
+			    s = verbose ? " Source route failed" : " !S";
+			    break;
+
+			case 6:	  // ICMP_UNREACH_NET_UNKNOWN
+			    s = verbose ? " Unknown net" : " !U";
+			    break;
+
+			case 7:	  // ICMP_UNREACH_HOST_UNKNOWN
+			    s = verbose ? " Unknown host" : " !W";
+			    break;
+
+			case 8:	  // ICMP_UNREACH_ISOLATED
+			    s = verbose ? " Source route isolated" : " !I";
+			    break;
+
+			case 9:	  // ICMP_UNREACH_NET_PROHIB
+			    s = verbose ? " Admin prohibited net" : " !A";
+			    break;
+
+			case 10:  // ICMP_UNREACH_HOST_PROHIB
+			    s = verbose ? " Admin prohibited host" : " !Z";
+			    break;
+
+			case 11:  // ICMP_UNREACH_TOSNET
+			    s = verbose ? " Bad tos for net" : " !Q";
+			    break;
+
+			case 12:  // ICMP_UNREACH_TOSHOST
+			    s = verbose ? " Bad tos for host" : " !T";
+			    break;
+
+			case 13:  // ICMP_UNREACH_FILTER_PROHIB
+			    s = verbose ? " Admin prohibited filter" : " !X";
+			    break;
+
+			case 14:  // ICMP_UNREACH_HOST_PRECEDENCE
+			    s = verbose ? " Host precedence violation" : " !V";
+			    break;
+
+			case 15:  // ICMP_UNREACH_PRECEDENCE_CUTOFF
+			    s = verbose ? " Precedence cutoff" : " !C";
+			    break;
+
+			default:
+			    ss << " !<" << code << ">";
+			    s = ss.str();
+			    break;
+			}
+		    }
+		}
+			
+		std::printf("%s  %.3f ms", s.c_str(), rtt);
                 
 		if (ip->ip_src.s_addr == dst.s_addr)
 		    found = true;
 	    }
 	    std::cout << std::endl;
-	    if (found) break;
+	    if (found || unreachable) break;
 	}
 
 
