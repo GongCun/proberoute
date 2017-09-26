@@ -31,9 +31,10 @@ Options
                   default is "don't fragment".
  -s, --mtu=<MTU>  Using the specified MTU, default is auto detection.
  --conn           TCP connect probe, used to detect the path MTU.
- --syn/ack/null/fin/xmas
-                  TCP SYN, ACK, Null, FIN and Xmas probes.
+ --syn/ack/push/null/fin/xmas
+                  TCP SYN, ACK, PUSH, Null, FIN and Xmas probes.
  --badsum         Send packet with a bogus TCP/UDP/ICMP checksum.
  --badlen         Send packet with a bad IP option length.
  -e, --echo       Send ICMP echo request probes.
  -t, --timestamp  Send ICMP timestamp request probes.
+ --echo-reply     Send ICMP echo reply probes.
