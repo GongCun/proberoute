@@ -3,7 +3,7 @@
 
 // don't start from zero
 enum { OPT_HELP = 1000, OPT_PROTO, OPT_SERV, OPT_DEV, OPT_SRCIP,
-       OPT_SYN, OPT_ACK, OPT_NULL, OPT_FIN, OPT_XMAS };
+       OPT_SYN, OPT_ACK, OPT_PUSH, OPT_NULL, OPT_FIN, OPT_XMAS };
 
 static void usage()
 {
@@ -35,6 +35,7 @@ static struct poptOption po[] = {
     { "conn",         '\0', POPT_ARG_VAL,    &conn,      1,            NULL, NULL },
     { "syn",          '\0', POPT_ARG_NONE,   0,          OPT_SYN,      NULL, NULL },
     { "ack",          '\0', POPT_ARG_NONE,   0,          OPT_ACK,      NULL, NULL },
+    { "push",         '\0', POPT_ARG_NONE,   0,          OPT_PUSH,     NULL, NULL },
     { "null",         '\0', POPT_ARG_NONE,   0,          OPT_NULL,     NULL, NULL },
     { "fin",          '\0', POPT_ARG_NONE,   0,          OPT_FIN,      NULL, NULL },
     { "xmas",         '\0', POPT_ARG_NONE,   0,          OPT_XMAS,     NULL, NULL },
@@ -92,6 +93,10 @@ int parseOpt(int argc, char **argv, std::string& msg)
 
 	case OPT_ACK:
 	    flags = TH_ACK;
+	    break;
+
+	case OPT_PUSH:
+	    flags = TH_PUSH;
 	    break;
 
 	case OPT_NULL:
