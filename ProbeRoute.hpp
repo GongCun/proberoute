@@ -317,8 +317,26 @@ public:
 	
     int buildIpHeader(u_char *buf, int protoLen, u_char ttl, u_short flagFrag);
 
-    virtual void buildProtocolHeader() = 0;
-    virtual void buildProtocolPacket() = 0;
+    virtual int buildProtocolHeader(
+	u_char *buf,
+	int protoLen,
+	u_short sport = 0,
+	u_short dport = 0,
+	u_char flags = 0,
+	bool badsum = false
+    ) = 0;
+
+    virtual int buildProtocolPacket(
+	u_char *buf,
+	int protoLen,
+	u_char ttl,
+	u_short flagFrag = IP_DF,
+	u_short sport = 0,
+	u_short dport = 0,
+	u_char flags = 0,
+	bool badsum = false
+    ) = 0;
+
     int recvIcmp(const u_char *buf, int len);
 
     int getIphdrLen() const {
@@ -383,15 +401,25 @@ public:
         }
     }
 	
-    void buildProtocolHeader() {}
-    void buildProtocolPacket() {}
+    int buildProtocolHeader(
+	u_char *buf,
+	int protoLen,
+	u_short sport,
+	u_short dport,
+	u_char flags,
+	bool badsum
+    );
 
-    int buildProtocolHeader(u_char *buf, int protoLen, u_short sport, u_short dport,
-                            u_char flags = TH_SYN, bool badsum = false);
-
-    int buildProtocolPacket(u_char *buf, int protoLen, u_char ttl, u_short flagFrag,
-			    u_short sport, u_short dport,
-			    u_char flags, bool badsum);
+    int buildProtocolPacket(
+	u_char *buf,
+	int protoLen,
+	u_char ttl,
+	u_short flagFrag,
+	u_short sport,
+	u_short dport,
+	u_char flags,
+	bool badsum
+    );
 
     int recvTcp(const u_char *buf, int len,
                 u_short sport, u_short dport);
