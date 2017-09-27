@@ -7,7 +7,7 @@ include Makefile.gcc
 endif
 
 OBJS = main.o ProbeAddressInfo.o ProbeException.o ProbePcap.o ProbeSock.o \
-options_popt.o
+options.o
 
 PROGS = proberoute
 
