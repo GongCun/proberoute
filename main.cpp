@@ -144,12 +144,16 @@ int main(int argc, char *argv[])
 		if (setsockopt(connfd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)) < 0)
 		    throw ProbeException("setsockopt SO_REUSEPORT");
 #endif
+		// Bind local address and specified port
 		if (bind(connfd, addressInfo.getLocalSockaddr(),
 			 addressInfo.getLocalSockaddrLen()) < 0)
 		    throw ProbeException("bind");
 
-		n = TcpProbeSock::nonbConn(connfd, addressInfo.getForeignSockaddr(),
-					   addressInfo.getForeignSockaddrLen(), waittime, 0);
+		n = TcpProbeSock::nonbConn(connfd,
+					   addressInfo.getForeignSockaddr(),
+					   addressInfo.getForeignSockaddrLen(),
+					   waittime,
+					   0);
 
 		if (verbose > 1)
 		    std::cerr << "nonbConn() returns " << n << " ("
@@ -166,7 +170,6 @@ int main(int argc, char *argv[])
 
 		    ProbePcap capture(addressInfo.getDevice().c_str(), "tcp");
 
-		    std::cerr << "register atexit\n";
 		    if (atexit(Close) != 0)
 			throw ProbeException("atexit");
 
@@ -246,6 +249,8 @@ int main(int argc, char *argv[])
 		    mtu,
 		    src,
 		    dst,
+		    sport,
+		    dport,
 		    4,
 		    NULL,
 		    tcplen,
@@ -260,6 +265,8 @@ int main(int argc, char *argv[])
 		    mtu,
 		    src,
 		    dst,
+		    sport,
+		    dport,
 		    iplen,
 		    ipopt,
 		    tcplen,
@@ -281,12 +288,29 @@ int main(int argc, char *argv[])
 
 	case IPPROTO_UDP:
 	    if (badlen)
-		probe = new UdpProbeSock(mtu, src, dst, 4);
+		probe = new UdpProbeSock(
+		    mtu,
+		    src,
+		    dst,
+		    sport,
+		    dport,
+		    4
+		);
 	    else
-		probe = new UdpProbeSock(mtu, src, dst);
+		probe = new UdpProbeSock(
+		    mtu,
+		    src,
+		    dst,
+		    sport,
+		    dport
+		);
 
-	    if (verbose > 2)
-		std::cout << *probe << std::endl;
+	    if (verbose > 2) {
+		if (UdpProbeSock *udpProbe = dynamic_cast<UdpProbeSock *>(probe))
+		    std::cout << *udpProbe << std::endl;
+		else
+		    throw std::bad_cast();
+	    }
 
 	    break;		  // case IPPROTO_UDP
 
@@ -326,12 +350,14 @@ int main(int argc, char *argv[])
 
 	for (ttl = firstttl;
 	     ttl < maxttl;
-	     // the original traceroute(1) increments the destination UDP port 
-	     ++ttl, (protocol == IPPROTO_UDP && !service) ? ++dport : 
+	     ++ttl,
 		   ({
-		       if (protocol == IPPROTO_ICMP)
+		       // the original traceroute(1) increments the destination UDP port 
+		       if (protocol == IPPROTO_UDP && !service)
+			   (dynamic_cast<UdpProbeSock *>(probe))->incrUdpPort();
+		       else if (protocol == IPPROTO_ICMP)
 			   (dynamic_cast<IcmpProbeSock *>(probe))->incrIcmpSeq();
-		       dport;
+		       0;	  // just pad expression
 		   })
 	) {
             std::printf("%3d ", ttl);
@@ -339,10 +365,10 @@ int main(int argc, char *argv[])
 		if (gettimeofday(&tv, NULL) < 0)
 		    throw ProbeException("gettimeofday");
 
-		if (protocol == IPPROTO_TCP)
-		    packlen = (flags == TH_SYN) ?
-			      probe->getProtocolHdrLen() :
-			      probe->getPmtu() - probe->getIphdrLen();
+		if ((protocol == IPPROTO_TCP && flags == TH_SYN) ||
+		    (protocol == IPPROTO_ICMP &&
+		     (flags == ICMP_TSTAMP || flags == ICMP_TSTAMPREPLY)))
+		    packlen = probe->getProtocolHdrLen();
 		else
 		    packlen = probe->getPmtu() - probe->getIphdrLen();
 
@@ -353,8 +379,6 @@ int main(int argc, char *argv[])
                     probe->buildProtocolHeader(
                         buf,
                         packlen,
-                        sport,
-                        dport,
                         flags,
                         badsum
                     );
@@ -375,8 +399,6 @@ int main(int argc, char *argv[])
                         packlen,
                         ttl,
                         IP_DF,
-                        sport,
-                        dport,
                         flags,
                         badsum
                     );
@@ -407,7 +429,7 @@ int main(int argc, char *argv[])
 			break;
 		    if (protocol == IPPROTO_TCP) {
 			if (TcpProbeSock *tcpProbe = dynamic_cast<TcpProbeSock *>(probe)) {
-			    if (tcpcode = tcpProbe->recvTcp(ptr, caplen, sport, dport))
+			    if (tcpcode = tcpProbe->recvTcp(ptr, caplen))
 				break;
 			} else {
 			    throw std::bad_cast();
@@ -515,6 +537,13 @@ int main(int argc, char *argv[])
 
 	    if (found || unreachable) {
 		if (protocol == IPPROTO_TCP) {
+		    TcpProbeSock *tcpProbe = dynamic_cast<TcpProbeSock *>(probe);
+		    if (!tcpProbe)
+			throw std::bad_cast();
+		    assert(dport == tcpProbe->getTcpDstPort());
+		    
+		    dport = tcpProbe->getTcpDstPort();
+		    
 		    if (connfd >= 0)
 			std::cout << "Port " << dport << " open" << std::endl;
 		    else if (conn)
@@ -533,7 +562,7 @@ int main(int argc, char *argv[])
 			    break;
 
 			default:
-			    ;
+			    std::cout << "Port " << dport << " state unknown" << std::endl;
 			}
 		    }
 		}
