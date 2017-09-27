@@ -504,10 +504,10 @@ public:
 	uint32_t ack = 0
     ):
 	ProbeSock(IPPROTO_TCP, mtu, src, dst, iplen, ipbuf, id),
-	sport(_sport),
-	dport(_dport),
 	tcpoptLen(len),
 	tcphdrLen(PROBE_TCP_LEN),
+	sport(_sport),
+	dport(_dport),
 	tcpseq(seq),
 	tcpack(ack)
 	{
