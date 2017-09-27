@@ -337,6 +337,19 @@ int main(int argc, char *argv[])
 	    exit(1);
 	} // case PROTOCOL
 
+	std::cout << "proberoute to " << host
+		  << " (" << inet_ntoa(probe->getDstAddr()) << ")"
+		  << " from " << inet_ntoa(probe->getSrcAddr())
+		  << " (" << addressInfo.getDevice() << ")"
+		  << " with " << (
+		      probe->getProtocol() == IPPROTO_TCP  ? "TCP" :
+		      probe->getProtocol() == IPPROTO_UDP  ? "UDP" :
+		      probe->getProtocol() == IPPROTO_ICMP ? "ICMP" : "unknown"
+		  ) << " protocol" << std::endl;
+	std::cout << firstttl << " hops min, " << maxttl << " hops max" << std::endl;
+	std::cout << "outgoing MTU = " << probe->getPmtu() << std::endl;
+	
+
 	//
 	// Send the probe and obtain the router/host IP
 	// 
