@@ -701,4 +701,26 @@ int UdpProbeSock::recvIcmp(const u_char *buf, int len)
 
     return 0;
 }
+
+
+int setAddrByName(const char *host, struct in_addr *addr)
+{
+
+    struct addrinfo hints, *res;
+    struct sockaddr_in *inaddr;
+
+    bzero(&hints, sizeof(struct addrinfo));
+    hints.ai_flags = AI_CANONNAME;
+    hints.ai_family = AF_INET;
+    hints.ai_socktype = 0;
+
+    if (getaddrinfo(host, NULL, &hints, &res) != 0)
+	return -1;
+
+    inaddr = (struct sockaddr_in *)res->ai_addr;
+    memmove(addr, &inaddr->sin_addr, sizeof(struct in_addr));
+
+    return 0;
+}
+
  

@@ -71,11 +71,12 @@
 #define MAX_MTU 65535		 // MTU at least 68, max of 64KB 
 #define IPPROTO_BAD 143		 // IANA - 143-252 (0x8F-0xFC) UNASSIGNED 
 #define TCP_OPT_LEN 40		 // The maximum length of TCP options
-#define IP_OPT_LEN 40		 // The maximum length of IP options
+#define IP_OPT_LEN 44		 // The maximum length of IP options
 #define PROBE_IP_LEN 20		 // IP header length (not include any option)
 #define PROBE_TCP_LEN 20	 // TCP header length (not include any option)
 #define PROBE_UDP_LEN 8		 // UDP header length 
 #define PROBE_ICMP_LEN 8	 // ICMP header length 
+#define MAX_GATEWAY 9		 // Maximum source route records
 
 extern sigjmp_buf jumpbuf;
 extern int verbose;
@@ -91,6 +92,8 @@ extern int conn;
 extern int badsum, badlen;
 extern const char *host, *service, *srcip;
 extern u_char flags;
+extern u_char tcpopt[TCP_OPT_LEN], ipopt[IP_OPT_LEN];
+extern u_char *optptr;
 
 inline void safeFree(void *point)
 {
@@ -637,5 +640,7 @@ inline std::ostream& operator<<(std::ostream& output,
 }
 
 int parseOpt(int argc, char **argv, std::string&);
+
+int setAddrByName(const char *host, struct in_addr *addr);
 
 #endif
