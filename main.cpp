@@ -406,7 +406,7 @@ int main(int argc, char *argv[])
 			   (dynamic_cast<UdpProbeSock *>(probe))->incrUdpPort();
 		       else if (protocol == IPPROTO_ICMP)
 			   (dynamic_cast<IcmpProbeSock *>(probe))->incrIcmpSeq();
-		       0;	  // just pad expression
+		       // 0;	  // just pad expression
 		   })
 	) {
             std::printf("%3d ", ttl);
