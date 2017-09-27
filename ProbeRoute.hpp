@@ -467,6 +467,8 @@ public:
     inline void incrUdpPort() {
 	++dport;
     }
+
+    virtual int recvIcmp(const u_char *buf, int len);
 }; // class UdpProbeSock
 
 class TcpProbeSock: public ProbeSock {
