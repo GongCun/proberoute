@@ -354,7 +354,18 @@ public:
     int getPmtu() const {
         return pmtu;
     }
-            
+
+    in_addr getSrcAddr() const {
+	return srcAddr;
+    }
+
+    in_addr getDstAddr() const {
+	return dstAddr;
+    }
+
+    int getProtocol() const {
+	return protocol;
+    }
 
 protected:
     const int protocol;
