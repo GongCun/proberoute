@@ -1,7 +1,10 @@
-CC = xlc++ -g
-override CFLAGS += -qrtti -qflag=i:i -qinfo=use
-override CPPFLAGS += -qrtti -qflag=i:i -qinfo=use -I/usr/include -D_AIX 
-override LIBS += -L/usr/lib -lpcap -lpopt
+OS = $(shell uname -s |tr '[:lower:]' '[:upper:]')
+
+ifeq (AIX, $(OS))
+include Makefile.aix
+else
+include Makefile.gcc
+endif
 
 OBJS = main.o ProbeAddressInfo.o ProbeException.o ProbePcap.o ProbeSock.o \
 options_popt.o
@@ -12,10 +15,6 @@ all: ${PROGS}
 
 proberoute: $(OBJS) 
 	${CC} ${CFLAGS} -o $@ $^ $(LIBS)
-
-# No need, just for g++
-#$(OBJS): export CPLUS_INCLUDE_PATH = /usr/include
-#$(OBJS): export OBJC_INCLUDE_PATH = /usr/lib
 
 %.o: %.cpp ProbeRoute.hpp config.h usage.h
 	$(CC) $(CPPFLAGS) -c -o $@ $<
