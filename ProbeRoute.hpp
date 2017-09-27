@@ -277,7 +277,7 @@ public:
     ProbePcap(const char *,
 	      const char *) throw(ProbeException);
     const u_char *nextPcap(int *len);
-};
+}; // class ProbePcap
 
 class ProbeSock {
     friend std::ostream& operator<<(std::ostream&,
@@ -285,13 +285,24 @@ class ProbeSock {
 public:
     static int openSock(const int protocol) throw(ProbeException);
     virtual ~ProbeSock() { close(rawfd); }
-    ProbeSock(const int proto, u_short mtu,
-	      struct in_addr src, struct in_addr dst,
-              int len = 0, u_char *buf = NULL,
-              uint16_t id = (u_short)time(0) & 0xffff):
-	protocol(proto), rawfd(openSock(proto)), pmtu(mtu),
-	srcAddr(src), dstAddr(dst), ipoptLen(len),
-        iphdrLen(PROBE_IP_LEN), ipid(id) {
+    ProbeSock(
+	const int proto,
+	u_short mtu,
+	struct in_addr src,
+	struct in_addr dst,
+	int len = 0,
+	u_char *buf = NULL,
+	uint16_t id = (u_short)time(0) & 0xffff
+    ):
+	protocol(proto),
+	rawfd(openSock(proto)),
+	pmtu(mtu),
+	srcAddr(src),
+	dstAddr(dst),
+	ipoptLen(len),
+        iphdrLen(PROBE_IP_LEN),
+	ipid(id)
+	{
         assert(len >= 0);
         if (len) {
             if (!buf) {
@@ -319,8 +330,6 @@ public:
     virtual int buildProtocolHeader(
 	u_char *buf,
 	int protoLen,
-	u_short sport = 0,
-	u_short dport = 0,
 	u_char flags = 0,
 	bool badsum = false
     ) = 0;
@@ -330,8 +339,6 @@ public:
 	int protoLen,
 	u_char ttl,
 	u_short flagFrag = IP_DF,
-	u_short sport = 0,
-	u_short dport = 0,
 	u_char flags = 0,
 	bool badsum = false
     ) = 0;
@@ -387,11 +394,13 @@ public:
 	u_char flags = ICMP_ECHO, // ICMP_ECHO or ICMP_TSTAMP
 	int iplen = 0,
 	u_char *ipbuf = NULL
-    ): ProbeSock(IPPROTO_ICMP, mtu, src, dst, iplen, ipbuf),
-       icmpType(flags),
-       icmphdrLen(flags == ICMP_TSTAMP ? 20 : 8),
-       icmpId(getpid() & 0xffff),
-       icmpSeq(0) {
+    ):
+	ProbeSock(IPPROTO_ICMP, mtu, src, dst, iplen, ipbuf),
+	icmpType(flags),
+	icmphdrLen(flags == ICMP_TSTAMP ? 20 : 8),
+	icmpId(getpid() & 0xffff),
+	icmpSeq(0)
+	{
     }
     
     // use the base class destructor
@@ -399,8 +408,6 @@ public:
     int buildProtocolHeader(
 	u_char *buf,
 	int protoLen,
-	u_short sport,
-	u_short dport,
 	u_char flags,
 	bool badsum
     );
@@ -410,8 +417,6 @@ public:
 	int protoLen,
 	u_char ttl,
 	u_short flagFrag,
-	u_short sport,
-	u_short dport,
 	u_char flags,
 	bool badsum
     );
@@ -424,7 +429,7 @@ public:
 	return icmpSeq;
     }
 
-    void incrIcmpSeq() {
+    inline void incrIcmpSeq() {
 	++icmpSeq;
     }
 
@@ -432,27 +437,38 @@ public:
 }; // class IcmpProbeSock
 
 class UdpProbeSock: public ProbeSock {
+
+    friend std::ostream& operator<<(std::ostream& output,
+                                    const UdpProbeSock& probe);
+
+private:
+    u_short sport, dport;
+    
 public:
     UdpProbeSock(
 	u_short mtu,
 	struct in_addr src,
 	struct in_addr dst,
+	u_short _sport,
+	u_short _dport,
 	int iplen = 0,
 	u_char *ipbuf = NULL
-    ): ProbeSock(IPPROTO_UDP, mtu, src, dst, iplen, ipbuf) {
+    ):
+	ProbeSock(IPPROTO_UDP, mtu, src, dst, iplen, ipbuf),
+	sport(_sport),
+	dport(_dport)
+	{
     }
     
     // use the base class destructor
     
-    int getProtocolHdrLen() const {
+    int getProtocolHdrLen() const { // UDP header length is fixed
 	return PROBE_UDP_LEN;
     }
 
     int buildProtocolHeader(
 	u_char *buf,
 	int protoLen,
-	u_short sport,
-	u_short dport,
 	u_char flags,
 	bool badsum
     );
@@ -462,24 +478,41 @@ public:
 	int protoLen,
 	u_char ttl,
 	u_short flagFrag,
-	u_short sport,
-	u_short dport,
 	u_char flags,
 	bool badsum
     );
+
+    inline void incrUdpPort() {
+	++dport;
+    }
 }; // class UdpProbeSock
 
 class TcpProbeSock: public ProbeSock {
     friend std::ostream& operator<<(std::ostream& output,
                                     const TcpProbeSock& probe);
 public:
-    TcpProbeSock(u_short mtu, struct in_addr src, struct in_addr dst,
-		 int iplen = 0, u_char *ipbuf = NULL,
-		 int len = 0, u_char *buf = NULL,
-		 uint16_t id = (u_short)time(0) & 0xffff,
-                 uint32_t seq = 0, uint32_t ack = 0):
+    TcpProbeSock(
+	u_short mtu,
+	struct in_addr src,
+	struct in_addr dst,
+	u_short _sport,
+	u_short _dport,
+	int iplen = 0,
+	u_char *ipbuf = NULL,
+	int len = 0,
+	u_char *buf = NULL,
+	uint16_t id = (u_short)time(0) & 0xffff,
+	uint32_t seq = 0,
+	uint32_t ack = 0
+    ):
 	ProbeSock(IPPROTO_TCP, mtu, src, dst, iplen, ipbuf, id),
-	tcpoptLen(len), tcphdrLen(PROBE_TCP_LEN), tcpseq(seq), tcpack(ack) {
+	sport(_sport),
+	dport(_dport),
+	tcpoptLen(len),
+	tcphdrLen(PROBE_TCP_LEN),
+	tcpseq(seq),
+	tcpack(ack)
+	{
         assert(len >= 0);
         if (len) {
             if (!buf) {
@@ -506,8 +539,6 @@ public:
     int buildProtocolHeader(
 	u_char *buf,
 	int protoLen,
-	u_short sport,
-	u_short dport,
 	u_char flags,
 	bool badsum
     );
@@ -517,14 +548,11 @@ public:
 	int protoLen,
 	u_char ttl,
 	u_short flagFrag,
-	u_short sport,
-	u_short dport,
 	u_char flags,
 	bool badsum
     );
 
-    int recvTcp(const u_char *buf, int len,
-                u_short sport, u_short dport);
+    int recvTcp(const u_char *buf, int len);
 
     static bool capWrite(
         const u_char *buf,
@@ -543,21 +571,27 @@ public:
     static int nonbConn(int fd, const struct sockaddr *addr, socklen_t addrlen,
 			int nsec, unsigned long msec);
     
-    
     int getProtocolHdrLen() const {
 	return tcphdrLen;
+    }
+
+    int getTcpDstPort() const {
+	return dport;
     }
 
 private:
     u_char tcpopt[TCP_OPT_LEN];
     int tcpoptLen;
     int tcphdrLen;
+    u_short sport, dport;
     uint32_t tcpseq, tcpack;
 }; // class TcpProbeSock
 
 inline std::ostream& operator<<(std::ostream& output,
 				const ProbeSock& probe)
 {
+    output << "srcAddr: " << inet_ntoa(probe.srcAddr) << std::endl;
+    output << "dstAddr: " << inet_ntoa(probe.dstAddr) << std::endl;
     output << "protocol: " << probe.protocol << std::endl;
     output << "rawfd: " << probe.rawfd << std::endl;
     output << "pmtu: " << probe.pmtu << std::endl;
@@ -585,6 +619,8 @@ inline std::ostream& operator<<(std::ostream& output,
         std::printf("%02x%s", probe.tcpopt[i], i == probe.tcpoptLen - 1  ? "\n" : " ");
     if (!probe.tcpoptLen) output << "null" << std::endl;
 
+    output << "sport: " << probe.sport << std::endl;
+    output << "dport: " << probe.dport << std::endl;
     output << "tcpseq: " << probe.tcpseq << std::endl;
     output << "tcpack: " << probe.tcpack;
 
@@ -604,6 +640,15 @@ inline std::ostream& operator<<(std::ostream& output,
     return output;
 }
 
+inline std::ostream& operator<<(std::ostream& output,
+				const UdpProbeSock& probe)
+{
+    output << (const ProbeSock &)probe << std::endl;
+    output << "sport: " << probe.sport << std::endl;
+    output << "dport: " << probe.dport;
+
+    return output;
+}
 
 int parseOpt(int argc, char **argv, std::string&);
 
