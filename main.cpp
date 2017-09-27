@@ -24,7 +24,7 @@ static void Close();
 #define printOpt(x) std::cout << #x": " << x << std::endl
 #define printOptStr(x) std::cout << #x": " << nullToEmpty(x) << std::endl
 
-static void sig_int(int signo)
+static void sig_exit(int signo)
 {
     exit(1);
 }
@@ -123,8 +123,11 @@ int main(int argc, char *argv[])
 
 	mtu = addressInfo.getDevMtu();
 		
-
-	signal(SIGINT, sig_int);
+	static const int signo[] = { SIGHUP, SIGINT, SIGQUIT, SIGTERM };
+	
+	for (i = 0; i < sizeof(signo) / sizeof(int); i++)
+	    if (signal(signo[i], sig_exit) == SIG_ERR)
+		throw ProbeException("signal");
 
 	switch (protocol) {
 	case IPPROTO_TCP:
