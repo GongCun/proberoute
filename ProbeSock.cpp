@@ -533,14 +533,20 @@ int IcmpProbeSock::buildProtocolHeader(
     icmp->icmp_id = htons(icmpId);
     icmp->icmp_seq = htons(icmpSeq);
 
-    if (flags == ICMP_TSTAMP) {
+    if (flags == ICMP_TSTAMP ||
+	flags == ICMP_TSTAMPREPLY
+    ) {
 	if (gettimeofday(&tvorig, (struct timezone *)NULL) < 0) {
 	    perror("gettimeofday");
 	    exit(1);
 	}
 	tsorig = tvorig.tv_sec % (24 * 60 * 60) * 1000 + tvorig.tv_usec / 1000;
 	icmp->icmp_otime = htonl(tsorig);
-	icmp->icmp_rtime = icmp->icmp_ttime = 0;
+
+	if (flags == ICMP_TSTAMP)
+	    icmp->icmp_rtime = icmp->icmp_ttime = 0;
+	else
+	    icmp->icmp_rtime = icmp->icmp_ttime = icmp->icmp_otime;
     }
 
     if (badsum) {
@@ -647,7 +653,9 @@ int IcmpProbeSock::recvIcmp(const u_char *buf, int len)
     else if (type == ICMP_ECHOREPLY ||
 	     type == ICMP_TSTAMPREPLY) {
 	if (icmp->icmp_id == htons(icmpId) &&
-	    icmp->icmp_seq == htons(icmpSeq))
+	    icmp->icmp_seq == htons(icmpSeq) &&
+            ip->ip_id != htons(ipid)) // ensure the message is not sent by
+				      // ourselves
 	    return -3;
     }
 
