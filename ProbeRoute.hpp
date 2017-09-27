@@ -341,7 +341,7 @@ public:
 	u_short flagFrag = IP_DF,
 	u_char flags = 0,
 	bool badsum = false
-    ) = 0;
+    );
 
     virtual int recvIcmp(const u_char *buf, int len);
 
@@ -412,15 +412,6 @@ public:
 	bool badsum
     );
 
-    int buildProtocolPacket(
-	u_char *buf,
-	int protoLen,
-	u_char ttl,
-	u_short flagFrag,
-	u_char flags,
-	bool badsum
-    );
-
     int getProtocolHdrLen() const {
 	return icmphdrLen;
     }
@@ -469,15 +460,6 @@ public:
     int buildProtocolHeader(
 	u_char *buf,
 	int protoLen,
-	u_char flags,
-	bool badsum
-    );
-
-    int buildProtocolPacket(
-	u_char *buf,
-	int protoLen,
-	u_char ttl,
-	u_short flagFrag,
 	u_char flags,
 	bool badsum
     );
@@ -539,15 +521,6 @@ public:
     int buildProtocolHeader(
 	u_char *buf,
 	int protoLen,
-	u_char flags,
-	bool badsum
-    );
-
-    int buildProtocolPacket(
-	u_char *buf,
-	int protoLen,
-	u_char ttl,
-	u_short flagFrag,
 	u_char flags,
 	bool badsum
     );
