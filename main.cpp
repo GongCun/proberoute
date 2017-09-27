@@ -1,6 +1,5 @@
 #include "ProbeRoute.hpp"
 #include <assert.h>
-// #include <getopt.h>
 
 sigjmp_buf jumpbuf;
 int verbose;
@@ -574,6 +573,8 @@ int main(int argc, char *argv[])
 	    }
 	}
 
+	delete probe;
+	
     } catch (ProbeException &e) {
 	std::cerr << e.what() << std::endl;
 	exit(1);
@@ -589,7 +590,7 @@ int main(int argc, char *argv[])
 static void Close()
 {
     if (connfd >= 0 && origttl > 0) {
-	std::cerr << "connfd = " << connfd << " origttl = " << origttl << std::endl;
+	// std::cerr << "connfd = " << connfd << " origttl = " << origttl << std::endl;
 	// Resume the original TTL to ensure that we can discard the
 	// connection successfully.
 	setsockopt(connfd, IPPROTO_IP, IP_TTL, &origttl, sizeof(origttl));
