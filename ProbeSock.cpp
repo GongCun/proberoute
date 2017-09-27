@@ -181,19 +181,23 @@ int TcpProbeSock::buildProtocolHeader(
     return tcphdrLen;
 }
 
-int TcpProbeSock::buildProtocolPacket(u_char *buf, int protoLen,
-				      u_char ttl, u_short flagFrag,
-				      u_char flags, bool badsum)
-{
-    int iplen, tcplen;
+int ProbeSock::buildProtocolPacket(
+    u_char *buf,
+    int protoLen,
+    u_char ttl,
+    u_short flagFrag,
+    u_char flags,
+    bool badsum
+) {
+    int iplen, hdrlen;
 
     iplen = buildIpHeader(buf, protoLen, ttl, flagFrag);
     assert(iplen == iphdrLen);
 	
-    tcplen = buildProtocolHeader(buf + iplen, protoLen, flags, badsum);
-    assert(tcplen == tcphdrLen);
+    hdrlen = buildProtocolHeader(buf + iplen, protoLen, flags, badsum);
+    assert(hdrlen == getProtocolHdrLen());
 
-    return iphdrLen + protoLen;	// total packet length
+    return iphdrLen + protoLen;	  // total packet length
 }
 
 // Guess next MTUs
@@ -489,25 +493,6 @@ int UdpProbeSock::buildProtocolHeader(
     return PROBE_UDP_LEN;
 }
 
-int UdpProbeSock::buildProtocolPacket(
-    u_char *buf,
-    int protoLen,
-    u_char ttl,
-    u_short flagFrag,
-    u_char flags,
-    bool badsum
-) {
-    int iplen, udplen;
-
-    iplen = buildIpHeader(buf, protoLen, ttl, flagFrag);
-    assert(iplen == iphdrLen);
-	
-    udplen = buildProtocolHeader(buf + iplen, protoLen, flags, badsum);
-    assert(udplen == PROBE_UDP_LEN);
-
-    return iphdrLen + protoLen;	// total packet length
-}
-
 int IcmpProbeSock::buildProtocolHeader(
     u_char *buf,
     int protoLen,
@@ -554,25 +539,6 @@ int IcmpProbeSock::buildProtocolHeader(
     }
 
     return icmphdrLen;
-}
-
-int IcmpProbeSock::buildProtocolPacket(
-    u_char *buf,
-    int protoLen,
-    u_char ttl,
-    u_short flagFrag,
-    u_char flags,
-    bool badsum
-) {
-    int iplen, icmplen;
-
-    iplen = buildIpHeader(buf, protoLen, ttl, flagFrag);
-    assert(iplen == iphdrLen);
-	
-    icmplen = buildProtocolHeader(buf + iplen, protoLen, flags, badsum);
-    assert(icmplen == icmphdrLen);
-
-    return iphdrLen + protoLen;	  // total packet length
 }
 
 int IcmpProbeSock::recvIcmp(const u_char *buf, int len)
