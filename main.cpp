@@ -110,7 +110,8 @@ int main(int argc, char *argv[])
 
     try {
 	ProbeAddressInfo addressInfo(host, service, srcip, srcport, device, mtu);
-	std::cout << addressInfo << std::endl;
+	if (verbose > 2)
+	    std::cout << addressInfo << std::endl;
 
 	sinptr = (struct sockaddr_in *)addressInfo.getLocalSockaddr();
 	src = sinptr->sin_addr;
@@ -277,7 +278,7 @@ int main(int argc, char *argv[])
 		);
 	    }
 
-	    if (verbose > 2) {
+	    if (verbose > 1) {
 		if (TcpProbeSock *tcpProbe = dynamic_cast<TcpProbeSock *>(probe))
 		    std::cout << *tcpProbe << std::endl;
 		else
@@ -305,7 +306,7 @@ int main(int argc, char *argv[])
 		    dport
 		);
 
-	    if (verbose > 2) {
+	    if (verbose > 1) {
 		if (UdpProbeSock *udpProbe = dynamic_cast<UdpProbeSock *>(probe))
 		    std::cout << *udpProbe << std::endl;
 		else
@@ -320,7 +321,7 @@ int main(int argc, char *argv[])
 	    else
 		probe = new IcmpProbeSock(mtu, src, dst, flags);
 
-	    if (verbose > 2) {
+	    if (verbose > 1) {
 		if (IcmpProbeSock *icmpProbe = dynamic_cast<IcmpProbeSock *>(probe))
 		    std::cout << *icmpProbe << std::endl;
 		else 
