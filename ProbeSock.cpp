@@ -132,9 +132,12 @@ int ProbeSock::sendFragPacket(const u_char *tcpbuf, const int packlen,
 }
 
 	
-int TcpProbeSock::buildProtocolHeader(u_char *buf, int protoLen, u_short sport, u_short dport,
-				      u_char flags, bool badsum)
-{
+int TcpProbeSock::buildProtocolHeader(
+    u_char *buf,
+    int protoLen,
+    u_char flags,
+    bool badsum
+) {
     struct tcphdr *tcp;
     u_char *p;
     uint32_t sum = 0;
@@ -178,8 +181,8 @@ int TcpProbeSock::buildProtocolHeader(u_char *buf, int protoLen, u_short sport, 
     return tcphdrLen;
 }
 
-int TcpProbeSock::buildProtocolPacket(u_char *buf, int protoLen, u_char ttl, u_short flagFrag,
-				      u_short sport, u_short dport,
+int TcpProbeSock::buildProtocolPacket(u_char *buf, int protoLen,
+				      u_char ttl, u_short flagFrag,
 				      u_char flags, bool badsum)
 {
     int iplen, tcplen;
@@ -187,7 +190,7 @@ int TcpProbeSock::buildProtocolPacket(u_char *buf, int protoLen, u_char ttl, u_s
     iplen = buildIpHeader(buf, protoLen, ttl, flagFrag);
     assert(iplen == iphdrLen);
 	
-    tcplen = buildProtocolHeader(buf + iplen, protoLen, sport, dport, flags, badsum);
+    tcplen = buildProtocolHeader(buf + iplen, protoLen, flags, badsum);
     assert(tcplen == tcphdrLen);
 
     return iphdrLen + protoLen;	// total packet length
@@ -344,8 +347,7 @@ bool TcpProbeSock::capWrite(
 }
 
    
-int TcpProbeSock::recvTcp(const u_char *buf, int len,
-                          u_short sport, u_short dport)
+int TcpProbeSock::recvTcp(const u_char *buf, int len)
 {
     //
     // Return:
@@ -458,8 +460,6 @@ done:
 int UdpProbeSock::buildProtocolHeader(
     u_char *buf,
     int protoLen,
-    u_short sport,
-    u_short dport,
     u_char flags,
     bool badsum
 ) {
@@ -494,8 +494,6 @@ int UdpProbeSock::buildProtocolPacket(
     int protoLen,
     u_char ttl,
     u_short flagFrag,
-    u_short sport,
-    u_short dport,
     u_char flags,
     bool badsum
 ) {
@@ -504,7 +502,7 @@ int UdpProbeSock::buildProtocolPacket(
     iplen = buildIpHeader(buf, protoLen, ttl, flagFrag);
     assert(iplen == iphdrLen);
 	
-    udplen = buildProtocolHeader(buf + iplen, protoLen, sport, dport, flags, badsum);
+    udplen = buildProtocolHeader(buf + iplen, protoLen, flags, badsum);
     assert(udplen == PROBE_UDP_LEN);
 
     return iphdrLen + protoLen;	// total packet length
@@ -513,8 +511,6 @@ int UdpProbeSock::buildProtocolPacket(
 int IcmpProbeSock::buildProtocolHeader(
     u_char *buf,
     int protoLen,
-    u_short sport,
-    u_short dport,
     u_char flags,
     bool badsum
 ) {
@@ -565,8 +561,6 @@ int IcmpProbeSock::buildProtocolPacket(
     int protoLen,
     u_char ttl,
     u_short flagFrag,
-    u_short sport,
-    u_short dport,
     u_char flags,
     bool badsum
 ) {
@@ -575,7 +569,7 @@ int IcmpProbeSock::buildProtocolPacket(
     iplen = buildIpHeader(buf, protoLen, ttl, flagFrag);
     assert(iplen == iphdrLen);
 	
-    icmplen = buildProtocolHeader(buf + iplen, protoLen, sport, dport, flags, badsum);
+    icmplen = buildProtocolHeader(buf + iplen, protoLen, flags, badsum);
     assert(icmplen == icmphdrLen);
 
     return iphdrLen + protoLen;	  // total packet length
