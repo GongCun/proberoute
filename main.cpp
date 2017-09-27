@@ -128,10 +128,11 @@ int main(int argc, char *argv[])
 	// Set the Loose Source Route Record
 	if (optptr) {
 	    n = (optptr - ipopt) / 4 - 1;
-	    std::cerr << "n = " << n << std::endl;
+	    // std::cerr << "n = " << n << std::endl;
 	    if (++n > MAX_GATEWAY + 1)
 		throw ProbeException("too many source routes");
 	    
+	    // destination at end
 	    memcpy((struct in_addr *)optptr,
 		   &dst,
 		   sizeof(struct in_addr));
@@ -140,7 +141,8 @@ int main(int argc, char *argv[])
 	    iplen = ipopt[2] + 1;    // add 1 byte of NOP
 
 	    if (verbose > 2) {
-		std::printf("IP SSR option: code = %d, len = %d, ptr = %d\n",
+		std::printf("SSR option: code = %d, len = %d, ptr = %d\n"
+			    "SSR list: ",
 			    ipopt[1], ipopt[2], ipopt[3]);
 		for (u_char *ptr = ipopt + 4;
 		     ptr <= optptr;
