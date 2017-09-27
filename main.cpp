@@ -20,6 +20,10 @@ int connfd = -1;
 int origttl;
 static void Close();
 
+u_char tcpopt[TCP_OPT_LEN], ipopt[IP_OPT_LEN];
+u_char *optptr;
+
+
 #define printOpt(x) std::cout << #x": " << x << std::endl
 #define printOptStr(x) std::cout << #x": " << nullToEmpty(x) << std::endl
 
@@ -79,7 +83,6 @@ int main(int argc, char *argv[])
     uint16_t ipid = (u_short)time(0) & 0xffff;
     uint32_t seq = 0, ack = 0;
     u_char buf[MAX_MTU];
-    u_char tcpopt[TCP_OPT_LEN], ipopt[IP_OPT_LEN];
     bool found = false, unreachable = false;
     int code = 0, tcpcode = 0;
 
@@ -121,6 +124,32 @@ int main(int argc, char *argv[])
 	dport = ntohs(sinptr->sin_port);
 
 	mtu = addressInfo.getDevMtu();
+
+	// Set the Loose Source Route Record
+	if (optptr) {
+	    n = (optptr - ipopt) / 4 - 1;
+	    std::cerr << "n = " << n << std::endl;
+	    if (++n > MAX_GATEWAY + 1)
+		throw ProbeException("too many source routes");
+	    
+	    memcpy((struct in_addr *)optptr,
+		   &dst,
+		   sizeof(struct in_addr));
+
+	    ipopt[2] = 3 + n * 4;    // option length
+	    iplen = ipopt[2] + 1;    // add 1 byte of NOP
+
+	    if (verbose > 2) {
+		std::printf("IP SSR option: code = %d, len = %d, ptr = %d\n",
+			    ipopt[1], ipopt[2], ipopt[3]);
+		for (u_char *ptr = ipopt + 4;
+		     ptr <= optptr;
+		     ptr += sizeof(struct in_addr))
+		    std::printf("%s%s", inet_ntoa(*(struct in_addr *)ptr),
+				ptr != optptr ? " " : "\n");
+	    }
+	}
+
 		
 	static const int signo[] = { SIGHUP, SIGINT, SIGQUIT, SIGTERM };
 	
@@ -305,7 +334,9 @@ int main(int argc, char *argv[])
 		    src,
 		    dst,
 		    sport,
-		    dport
+		    dport,
+		    iplen,
+		    ipopt
 		);
 
 	    if (verbose > 1) {
@@ -321,7 +352,7 @@ int main(int argc, char *argv[])
 	    if (badlen)
 		probe = new IcmpProbeSock(mtu, src, dst, flags, 4);
 	    else
-		probe = new IcmpProbeSock(mtu, src, dst, flags);
+		probe = new IcmpProbeSock(mtu, src, dst, flags, iplen, ipopt);
 
 	    if (verbose > 1) {
 		if (IcmpProbeSock *icmpProbe = dynamic_cast<IcmpProbeSock *>(probe))
