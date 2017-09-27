@@ -262,7 +262,7 @@ ProbeAddressInfo::ProbeAddressInfo(const char *foreignHost, const char *foreignS
 	throw ProbeException("device not exist");
     }
 
-    if (verbose > 1) p->print();  // the iface address maybe different from
+    if (verbose > 2) p->print();  // the iface address maybe different from
                                   // specified source address
 
     // Determine whether the remote host and local host are in the
@@ -289,5 +289,6 @@ ProbeAddressInfo::ProbeAddressInfo(const char *foreignHost, const char *foreignS
           strcmp(strdst, strbrd) <= 0))
         sameLan = false;
     
+    freeDeviceInfo();
 }
 
