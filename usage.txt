@@ -1,3 +1,9 @@
+proberoute  version 1.0
+Copyright  (C) 2017 by Cun Gong <gong_cun@bocmacau.com>
+
+proberoute is a more powerful routing detection tool that provides multiple
+protocols and detection methods.
+
 Usage: proberoute [OPTION] DEST
   or : proberoute [OPTION] DEST PORT
 
@@ -43,4 +49,3 @@ Options
                   Loose Source Route. Tell the network to route the packet
                   through the specified gateway (Unfortunately, most routers
                   have disabled source routing for security reasons).
-
