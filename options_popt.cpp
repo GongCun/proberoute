@@ -4,7 +4,7 @@
 // don't start from zero
 enum { OPT_HELP = 1000, OPT_PROTO, OPT_SERV, OPT_DEV, OPT_SRCIP,
        OPT_SYN, OPT_ACK, OPT_PUSH, OPT_NULL, OPT_FIN, OPT_XMAS,
-       OPT_ECHO, OPT_ECHOREPLY, OPT_TSTAMP, OPT_TSTAMPREPLY
+       OPT_ECHO, OPT_ECHOREPLY, OPT_TSTAMP, OPT_TSTAMPREPLY, OPT_GATEWAY
 };
 
 static void usage()
@@ -47,8 +47,20 @@ static struct poptOption po[] = {
     { "echo-reply",   '\0', POPT_ARG_NONE,   0,          OPT_ECHOREPLY,   NULL, NULL },
     { "tstamp",       't',  POPT_ARG_NONE,   0,          OPT_TSTAMP,      NULL, NULL },
     { "tstamp-reply", '\0', POPT_ARG_NONE,   0,          OPT_TSTAMPREPLY, NULL, NULL },
+    { "source-route", 'j',  POPT_ARG_STRING, 0,          OPT_GATEWAY,     NULL, NULL },
     { NULL,           '\0', POPT_ARG_NONE,   NULL,       0,               NULL, NULL }
 };
+
+static void gatewayInit()
+{
+    optptr = ipopt;
+    *optptr++ = IPOPT_NOP;	  // no operation
+    *optptr++ = IPOPT_LSRR;	  // loose source route
+    *optptr++ = 3;		  // options length
+    *optptr++ = 4;		  // ptr position
+
+    return;
+}
 
 
 int parseOpt(int argc, char **argv, std::string& msg)
@@ -56,6 +68,7 @@ int parseOpt(int argc, char **argv, std::string& msg)
     const char *arg;
     poptContext pc;
     int opt;
+    int n = 0;
 
     if (argc < 2)
 	usage();
@@ -136,6 +149,22 @@ int parseOpt(int argc, char **argv, std::string& msg)
 
 	case 'v':
 	    verbose++;
+	    break;
+
+        case OPT_GATEWAY:
+            arg = poptGetOptArg(pc);
+	    if (!optptr)
+		gatewayInit();
+	    if (++n > MAX_GATEWAY) {
+		msg = "too many source routes";
+		return -1;
+	    }
+	    if (setAddrByName(arg, (struct in_addr *)optptr) < 0) {
+		msg = "can't parse host ";
+		msg += arg;
+		return -1;
+	    }
+	    optptr += sizeof(struct in_addr);
 	    break;
 
 	default:
