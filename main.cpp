@@ -22,6 +22,7 @@ int origttl;
 static void Close();
 
 #define printOpt(x) std::cout << #x": " << x << std::endl
+#define printOptStr(x) std::cout << #x": " << nullToEmpty(x) << std::endl
 
 static void sig_int(int signo)
 {
@@ -30,10 +31,12 @@ static void sig_int(int signo)
 
 static void printOpts()
 {
+    std::cout << ">>>> Parse Options <<<<" << std::endl;
+    
     printOpt(verbose);
     printOpt(protocol);
     printOpt(srcport);
-    printOpt(nullToEmpty(device));
+    printOptStr(device);
     printOpt(nquery);
     printOpt(waittime);
     printOpt(firstttl);
@@ -43,10 +46,19 @@ static void printOpts()
     printOpt(conn);
     printOpt(badsum);
     printOpt(badlen);
-    printOpt(nullToEmpty(host));
-    printOpt(nullToEmpty(service));
-    printOpt(nullToEmpty(srcip));
-    std::printf("flags: 0x%02x\n", flags);
+    printOptStr(host);
+    printOptStr(service);
+    printOptStr(srcip);
+
+    std::cout << "flags: ";
+    if (protocol == IPPROTO_TCP)  // Flags (UAPRSF)
+	for (int i = 5; i >= 0; i--)
+	    std::cout << ((flags >> i) & 1);
+    else
+	std::cout << flags;
+    std::cout << std::endl;
+    
+    std::cout << ">>>> End <<<<" << std::endl;
 }
 
 int main(int argc, char *argv[])
@@ -85,15 +97,20 @@ int main(int argc, char *argv[])
 	exit(1);
     }
 
-    printOpts();
+    if (verbose > 2)
+	printOpts();
+
+    if (
+	protocol == IPPROTO_ICMP &&
+	!(flags == ICMP_ECHO || flags == ICMP_ECHOREPLY ||
+	  flags == ICMP_TSTAMP || flags == ICMP_TSTAMPREPLY)
+    )
+	flags = ICMP_ECHO;	  // Default ICMP type is Echo
+    
 
     try {
 	ProbeAddressInfo addressInfo(host, service, srcip, srcport, device, mtu);
 	std::cout << addressInfo << std::endl;
-
-        // addressInfo.getDeviceInfo();
-        // addressInfo.printDeviceInfo();
-        // addressInfo.freeDeviceInfo();
 
 	sinptr = (struct sockaddr_in *)addressInfo.getLocalSockaddr();
 	src = sinptr->sin_addr;
@@ -297,7 +314,13 @@ int main(int argc, char *argv[])
 	// Send the probe and obtain the router/host IP
 	// 
         ProbePcap capture(addressInfo.getDevice().c_str(),
-                          "tcp or icmp[0:1] == 3 or icmp[0:1] == 11 or icmp[0:1] == 12");
+                          "tcp or "
+			  "icmp[0:1] == 0  or "  // Echo Reply
+			  "icmp[0:1] == 3  or "  // Destination Unreachable
+			  "icmp[0:1] == 11 or "  // Time Exceed
+			  "icmp[0:1] == 12 or "	 // Parameter Problem
+			  "icmp[0:1] == 14"	 // Timestamp Reply
+	);
 
 	bzero(buf, sizeof(buf));
 
@@ -405,7 +428,7 @@ int main(int argc, char *argv[])
 
 		std::string s;
 		std::ostringstream ss;
-		if (code && code != -1) {
+		if (code && code != -1 && code != -3) {
 		    unreachable = true; // means found for UDP when ICMP code is
 					// ICMP_UNREACH_PORT
 		    if (code == -2)
