@@ -611,6 +611,8 @@ int main(int argc, char *argv[])
 			    break;
 
 			default:
+			    // Target host may sent the ICMP or UDP packet, so
+			    // can't get the TCP state.
 			    std::cout << "Port " << dport << " state unknown" << std::endl;
 			}
 		    }
