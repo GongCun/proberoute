@@ -272,7 +272,9 @@ private:
     struct bpf_program bpfCode;
 public:
     ~ProbePcap() {
-#ifdef HAVE_PCAP_FREECODE
+#ifdef HAVE_PCAP_CLOSE
+        pcap_close(handle);
+#elif defined HAVE_PCAP_FREECODE
         pcap_freecode(&bpfCode);
 #endif
 	// std::cerr << "EXIT PCAP" << std::endl;
