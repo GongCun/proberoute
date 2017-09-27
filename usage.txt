@@ -36,5 +36,11 @@ Options
  --badsum         Send packet with a bogus TCP/UDP/ICMP checksum.
  --badlen         Send packet with a bad IP option length.
  -e, --echo       Send ICMP echo request probes.
- -t, --timestamp  Send ICMP timestamp request probes.
  --echo-reply     Send ICMP echo reply probes.
+ -t, --tstamp     Send ICMP timestamp request probes.
+ --tstamp-reply   Send ICMP timestamp reply probes.
+ -j, --source-route <gateway>
+                  Loose Source Route. Tell the network to route the packet
+                  through the specified gateway (Unfortunately, most routers
+                  have disabled source routing for security reasons).
+
