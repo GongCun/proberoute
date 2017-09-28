@@ -1,4 +1,5 @@
 OS = $(shell uname -s |tr '[:lower:]' '[:upper:]')
+CPPFLAGS += -D_$(OS)
 
 ifeq (AIX, $(OS))
 include Makefile.aix
