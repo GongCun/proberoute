@@ -1,6 +1,6 @@
 #include "ProbeRoute.hpp"
 #include <assert.h>
-
+#include <errno.h>
 
 int ProbeSock::openSock(const int protocol) throw(ProbeException)
 {
