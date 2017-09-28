@@ -1,5 +1,6 @@
 #include "ProbeRoute.hpp"
 #include <assert.h>
+#include <errno.h>
 
 void ProbeAddressInfo::getDeviceInfo() throw(ProbeException)
 {
