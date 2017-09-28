@@ -1,4 +1,3 @@
-proberoute  version 1.0
 Copyright  (C) 2017 by Cun Gong <gong_cun@bocmacau.com>
 
 proberoute is a more powerful routing detection tool that provides multiple
