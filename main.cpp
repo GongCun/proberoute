@@ -123,7 +123,11 @@ int main(int argc, char *argv[])
 	dst = sinptr->sin_addr;
 	dport = ntohs(sinptr->sin_port);
 
-	mtu = addressInfo.getDevMtu();
+	if ((mtu = addressInfo.getDevMtu()) <= 0) {
+	    std::ostringstream ss;
+	    ss << "MTU size " << mtu << " error";
+	    throw ProbeException(ss.str());
+	}
 
 	// Set the Loose Source Route Record
 	if (optptr) {
@@ -371,8 +375,8 @@ int main(int argc, char *argv[])
 	} // case PROTOCOL
 
 	std::cout << "proberoute to " << host
-		  << " (" << inet_ntoa(probe->getDstAddr()) << ")"
-		  << " from " << inet_ntoa(probe->getSrcAddr())
+		  << " (" << inet_ntoa(probe->getDstAddr()) << ")";
+	std::cout << " from " << inet_ntoa(probe->getSrcAddr())
 		  << " (" << addressInfo.getDevice() << ")"
 		  << " with " << (
 		      probe->getProtocol() == IPPROTO_TCP  ? "TCP" :
@@ -585,7 +589,7 @@ int main(int argc, char *argv[])
 	    std::cout << std::endl;
 
 	    if (found || unreachable) {
-		if (protocol == IPPROTO_TCP) {
+		if (protocol == IPPROTO_TCP && tcpcode) {
 		    TcpProbeSock *tcpProbe = dynamic_cast<TcpProbeSock *>(probe);
 		    if (!tcpProbe)
 			throw std::bad_cast();
