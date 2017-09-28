@@ -13,8 +13,8 @@ AC_PROG_CC([xlc++ c++])
 # Checks for libraries.
 AC_CHECK_LIB(pcap, pcap_open_live, [], [AC_MSG_ERROR([cannot find libpcap])])
 AC_CHECK_LIB(popt, poptGetContext, [], [AC_MSG_ERROR([cannot find libpopt])])
-AC_SEARCH_LIBS(pcap_freecode, pcap)
-AC_SEARCH_LIBS(pcap_close, pcap)
+dnl AC_SEARCH_LIBS(pcap_freecode, pcap)
+dnl AC_SEARCH_LIBS(pcap_close, pcap)
 
 
 # Checks for header files.
@@ -39,8 +39,9 @@ AC_CHECK_MEMBERS([struct sockaddr.sa_len], [AC_DEFINE(HAVE_SOCKADDR_SA_LEN, 1, [
 #include <sys/socket.h>
 ])
 
-AC_CHECK_MEMBER([struct icmp.icmp_nextmtu], [AC_DEFINE(HAVE_ICMP_NEXTMTU, 1, [Define to 1 if <netinet/ip_icmp.h> have icmp_nextmtu])], [],
+AC_CHECK_MEMBERS([struct icmp.icmp_nextmtu], [AC_DEFINE(HAVE_ICMP_NEXTMTU, 1, [Define to 1 if icmp structures have icmp_nextmtu fields])], [],
 [#include <sys/types.h>
+#include <netinet/ip.h>
 #include <netinet/ip_icmp.h>
 ])
 
