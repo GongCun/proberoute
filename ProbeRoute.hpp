@@ -48,6 +48,9 @@
 #include <strings.h>		// bzero()
 #include <assert.h>
 
+#ifdef _LINUX
+#include <typeinfo>
+#endif
 #include <iostream>
 #include <sstream>
 #include <string>
