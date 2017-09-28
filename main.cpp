@@ -581,10 +581,15 @@ int main(int argc, char *argv[])
 		    }
 		}
 			
-		std::printf("%s%s  %.3f ms", s.empty() ? "" : "  ", s.c_str(), rtt);
                 
-		if (ip->ip_src.s_addr == dst.s_addr)
+		if (ip->ip_src.s_addr == dst.s_addr) {
 		    found = true;
+		    if (code == -1) // seems impossible but really happen
+			s = verbose ? "Time to live exceed" : "!TTL";
+		}
+
+		std::printf("%s%s  %.3f ms", s.empty() ? "" : "  ", s.c_str(), rtt);
+
 	    }
 	    std::cout << std::endl;
 
