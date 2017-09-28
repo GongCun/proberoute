@@ -71,5 +71,47 @@ if test $ac_cv_ipv6 = yes; then
 	AC_DEFINE([IPv6], 1, [Define to 1 if the system supports IPv6])
 fi
 
+dnl checking for pcap_freecode support
+AC_MSG_CHECKING(for pcap_freecode support)
+OLD_CFLAGS="$CFLAGS"
+OS=`uname -s | tr '[:lower:]' '[:upper:]'`
+CFLAGS=-D_$OS
+AC_LINK_IFELSE([AC_LANG_PROGRAM([[
+#include <pcap.h>
+#ifdef _AIX
+# include <net/bpf.h>
+# include <netinet/if_ether.h>
+#else
+# include <net/ethernet.h>
+#endif
+]], [[struct bpf_program bp; pcap_freecode(&bp);]])], [have_pcap_freecode=yes], [have_pcap_freecode=no])
+AC_MSG_RESULT($have_pcap_freecode)
+
+CFLAGS="$OLD_CFLAGS"
+if test x"$have_pcap_freecode" = x"yes"; then
+   AC_DEFINE([HAVE_PCAP_FREECODE], 1, [Define to 1 if the system supports pcap_freecode])
+fi
+
+dnl checking for pcap_close support
+AC_MSG_CHECKING(for pcap_close support)
+OLD_CFLAGS="$CFLAGS"
+OS=`uname -s | tr '[:lower:]' '[:upper:]'`
+CFLAGS=-D_$OS
+AC_LINK_IFELSE([AC_LANG_PROGRAM([[
+#include <pcap.h>
+#ifdef _AIX
+# include <net/bpf.h>
+# include <netinet/if_ether.h>
+#else
+# include <net/ethernet.h>
+#endif
+]], [[struct pcap_t *p; pcap_close(p);]])], [have_pcap_close=yes], [have_pcap_close=no])
+AC_MSG_RESULT($have_pcap_close)
+
+CFLAGS="$OLD_CFLAGS"
+if test x"$have_pcap_close" = x"yes"; then
+   AC_DEFINE([HAVE_PCAP_CLOSE], 1, [Define to 1 if the system supports pcap_close])
+fi
+
 ##AC_CONFIG_FILES([Makefile])
 AC_OUTPUT
