@@ -1,4 +1,4 @@
 CC = xlc++ -g
 override CFLAGS += -qrtti -qflag=i:i -qinfo=use
-override CPPFLAGS += -qrtti -qflag=i:i -qinfo=use -D_AIX 
+override CPPFLAGS += -qrtti -qflag=i:i -qinfo=use
 override LIBS += -lpcap -lpopt
