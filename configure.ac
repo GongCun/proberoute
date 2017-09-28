@@ -71,10 +71,10 @@ if test $ac_cv_ipv6 = yes; then
 	AC_DEFINE([IPv6], 1, [Define to 1 if the system supports IPv6])
 fi
 
+OS=`uname -s | tr '[:lower:]' '[:upper:]'`
 dnl checking for pcap_freecode support
 AC_MSG_CHECKING(for pcap_freecode support)
 OLD_CFLAGS="$CFLAGS"
-OS=`uname -s | tr '[:lower:]' '[:upper:]'`
 CFLAGS=-D_$OS
 AC_LINK_IFELSE([AC_LANG_PROGRAM([[
 #include <pcap.h>
@@ -94,10 +94,10 @@ fi
 
 dnl checking for pcap_close support
 AC_MSG_CHECKING(for pcap_close support)
-OLD_CFLAGS="$CFLAGS"
-OS=`uname -s | tr '[:lower:]' '[:upper:]'`
 CFLAGS=-D_$OS
-AC_LINK_IFELSE([AC_LANG_PROGRAM([[
+AC_LANG(C)
+AC_LANG_CONFTEST(
+[AC_LANG_PROGRAM([[
 #include <pcap.h>
 #ifdef _AIX
 # include <net/bpf.h>
@@ -105,10 +105,15 @@ AC_LINK_IFELSE([AC_LANG_PROGRAM([[
 #else
 # include <net/ethernet.h>
 #endif
-]], [[struct pcap_t *p; pcap_close(p);]])], [have_pcap_close=yes], [have_pcap_close=no])
+]], [[pcap_t *p; pcap_close(p);]])])
+if $CC -o conftest.o conftest.c -lpcap >/dev/null 2>&1; then
+have_pcap_close=yes
+else
+have_pcap_close=no
+fi
+rm conftest.o 2>/dev/null
 AC_MSG_RESULT($have_pcap_close)
 
-CFLAGS="$OLD_CFLAGS"
 if test x"$have_pcap_close" = x"yes"; then
    AC_DEFINE([HAVE_PCAP_CLOSE], 1, [Define to 1 if the system supports pcap_close])
 fi
