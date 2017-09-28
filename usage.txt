@@ -1,4 +1,5 @@
 Copyright  (C) 2017 by Cun Gong <gong_cun@bocmacau.com>
+BSD 3-clause "New" or "Revised" License
 
 proberoute is a more powerful routing detection tool that provides multiple
 protocols and detection methods.
