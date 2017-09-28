@@ -1,5 +1,6 @@
 OS = $(shell uname -s |tr '[:lower:]' '[:upper:]')
 CPPFLAGS += -D_$(OS)
+VERSION = 1.0
 
 ifeq (AIX, $(OS))
 include Makefile.aix
@@ -21,7 +22,8 @@ proberoute: $(OBJS)
 	$(CC) $(CPPFLAGS) -c -o $@ $<
 
 usage.h: usage.txt
-	sed <$< >$@ -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/.*/P("&");/'
+	@echo 'P("proberoute  version $(VERSION) build on $(OS) at '`date`'");' >$@
+	sed <$< >>$@ -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/.*/P("&");/'
 
 clean:
 	rm -f ${PROGS} *.o core *.BAK *~
