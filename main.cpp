@@ -410,7 +410,7 @@ default:
 
         if (verbose > 1) {
             for (probe = probeVec.begin(); probe != probeVec.end(); ++probe) {
-                std::cout << ">>>> ProbeSock Profile" << std::endl;
+                std::cout << ">>>> ProbeSock <<<<" << std::endl;
                 switch ((*probe)->getProtocol()) {
                 case IPPROTO_TCP:
 		    if (TcpProbeSock *tcpProbe = dynamic_cast<TcpProbeSock *>(*probe))
