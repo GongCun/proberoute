@@ -570,11 +570,18 @@ int IcmpProbeSock::recvIcmp(const u_char *buf, const int len)
     type = icmp->icmp_type;
     code = icmp->icmp_code;
 
-
-    if ((type == ICMP_TIMXCEED && code == ICMP_TIMXCEED_INTRANS) ||
-        type == ICMP_UNREACH ||
-	type == ICMP_PARAMPROB) {
-
+    if (type == ICMP_ECHOREPLY ||
+        type == ICMP_TSTAMPREPLY) {
+	if (icmp->icmp_id == htons(icmpId) &&
+	    icmp->icmp_seq == htons(icmpSeq) &&
+            ip->ip_id != htons(ipid)) // ensure the message is not sent by
+				      // ourselves
+	    return -3;
+    }
+    else if ((type == ICMP_TIMXCEED && code == ICMP_TIMXCEED_INTRANS) ||
+             type == ICMP_UNREACH ||
+             type == ICMP_PARAMPROB) {
+        
         origip = (struct ip *)(buf + iplen + PROBE_ICMP_LEN);
         origiplen = origip->ip_hl << 2;
 
@@ -611,15 +618,6 @@ int IcmpProbeSock::recvIcmp(const u_char *buf, const int len)
 
         return ((type == ICMP_TIMXCEED) ? -1 : code + 1);
     }
-    else if (type == ICMP_ECHOREPLY ||
-	     type == ICMP_TSTAMPREPLY) {
-	if (icmp->icmp_id == htons(icmpId) &&
-	    icmp->icmp_seq == htons(icmpSeq) &&
-            ip->ip_id != htons(ipid)) // ensure the message is not sent by
-				      // ourselves
-	    return -3;
-    }
-
     return 0;
 }
  

@@ -100,6 +100,18 @@ extern u_char tcpopt[TCP_OPT_LEN], ipopt[IP_OPT_LEN];
 extern u_char *optptr;
 extern std::vector<int> protoVec;
 
+inline int Rand()
+{
+    // only need call srand() once
+    static bool init = false;
+    
+    if (!init) {
+        srand(time(0));
+        init = true;
+    }
+    return rand();
+}
+ 
 inline void safeFree(void *point)
 {
     if (point) free(point);
@@ -293,8 +305,17 @@ class ProbeSock {
     friend std::ostream& operator<<(std::ostream&,
 				    const ProbeSock&);
 public:
+    virtual ProbeSock& operator++() {
+        ++ipid;
+        return *this;
+    }
+
     static int openSock(const int protocol) throw(ProbeException);
-    virtual ~ProbeSock() { close(rawfd); }
+    // If we copy anonymous class to vector, we can't close the FD
+    virtual ~ProbeSock() {
+        close(rawfd);
+        // std::cerr << "I'm freed" << std::endl;
+    }
     ProbeSock(
 	const int proto,
 	u_short mtu,
@@ -302,7 +323,7 @@ public:
 	struct in_addr dst,
 	int len = 0,
 	u_char *buf = NULL,
-	uint16_t id = (u_short)time(0) & 0xffff
+	uint16_t id = (u_short)Rand() & 0xffff
     ):
 	protocol(proto),
 	rawfd(openSock(proto)),
@@ -351,7 +372,7 @@ public:
 	bool badsum = false
     );
 
-    virtual int recvIcmp(const u_char *buf, int len);
+    virtual int recvIcmp(const u_char *buf, const int len);
 
     int getIphdrLen() const {
 	return iphdrLen;
@@ -375,6 +396,10 @@ public:
 	return protocol;
     }
 
+    int getRawfd() const {
+        return rawfd;
+    }
+            
 protected:
     const int protocol;
     int rawfd;
@@ -438,11 +463,17 @@ public:
 	return icmpSeq;
     }
 
-    inline void incrIcmpSeq() {
-	++icmpSeq;
+    // inline void incrIcmpSeq() {
+	// ++icmpSeq;
+    // }
+
+    virtual IcmpProbeSock& operator++() {
+        ++ipid;
+        ++icmpSeq;
+        return *this;
     }
 
-    virtual int recvIcmp(const u_char *buf, int len);
+    virtual int recvIcmp(const u_char *buf, const int len);
 }; // class IcmpProbeSock
 
 class UdpProbeSock: public ProbeSock {
@@ -481,11 +512,17 @@ public:
 	bool badsum
     );
 
-    inline void incrUdpPort() {
-	++dport;
+    // inline void incrUdpPort() {
+	// ++dport;
+    // }
+
+    virtual UdpProbeSock& operator++() {
+        ++ipid;
+        ++dport;
+        return *this;
     }
 
-    virtual int recvIcmp(const u_char *buf, int len);
+    virtual int recvIcmp(const u_char *buf, const int len);
 }; // class UdpProbeSock
 
 class TcpProbeSock: public ProbeSock {

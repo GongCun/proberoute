@@ -470,6 +470,8 @@ default:
                            ++(**probe);
                    })
 	) {
+            int savecode = 0;
+            
             std::printf("%3d ", ttl);
 	    for (i = 0; i < nquery; i++) {
 		if (gettimeofday(&tv, NULL) < 0)
@@ -559,6 +561,7 @@ default:
                         if ((*probe)->getProtocol() == IPPROTO_TCP) {
                             if (TcpProbeSock *tcpProbe = dynamic_cast<TcpProbeSock *>(*probe)) {
                                 if (tcpcode = tcpProbe->recvTcp(ptr, caplen)) {
+                                    savecode = tcpcode;
                                     msg = "TCP";
                                     goto endWait;
                                 }
@@ -683,7 +686,7 @@ default:
                      ++probe)
                     ;
                 
-		if (probe != probeVec.end() && tcpcode) {
+		if (probe != probeVec.end() && savecode) {
 		    TcpProbeSock *tcpProbe = dynamic_cast<TcpProbeSock *>(*probe);
 		    if (!tcpProbe)
 			throw std::bad_cast();
@@ -696,7 +699,7 @@ default:
 		    else if (conn)
 			std::cout << "Port " << dport << " closed" << std::endl;
 		    else {
-			switch (tcpcode) {
+			switch (savecode) {
 			case 1:
 			    if (tcpFlags == TH_SYN)
 				std::cout << "Port " << dport << " closed" << std::endl;
