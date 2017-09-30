@@ -666,9 +666,10 @@ default:
 			
                 
 		if (ip->ip_src.s_addr == dst.s_addr) {
-		    found = true;
 		    if (code == -1) // seems impossible but really happen
 			s = verbose ? "Time to live exceed" : "!TTL";
+                    else
+                        found = true;
 		}
 
                 if (!s.empty()) s.insert(0, "  ");
