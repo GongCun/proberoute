@@ -57,7 +57,7 @@
 #include <cstring>		// memset(), strcmp(), ...
 #include <stdexcept>
 #include <algorithm>
-// #include <list>
+#include <vector>
 
 #define CAP_LEN 1514             // Maximum capture length
 #define CAP_TIMEOUT 500          // Milliseconds; This timeout is used to arrange
@@ -83,7 +83,7 @@
 
 extern sigjmp_buf jumpbuf;
 extern int verbose;
-extern int protocol;
+// extern int protocol;
 extern int srcport;
 extern const char *device;
 extern int nquery;
@@ -94,9 +94,11 @@ extern int mtu;
 extern int conn;
 extern int badsum, badlen;
 extern const char *host, *service, *srcip;
-extern u_char flags;
+extern u_char tcpFlags;
+extern u_char icmpFlags;
 extern u_char tcpopt[TCP_OPT_LEN], ipopt[IP_OPT_LEN];
 extern u_char *optptr;
+extern std::vector<int> protoVec;
 
 inline void safeFree(void *point)
 {
@@ -338,7 +340,6 @@ public:
     virtual int buildProtocolHeader(
 	u_char *buf,
 	int protoLen,
-	u_char flags = 0,
 	bool badsum = false
     ) = 0;
 
@@ -347,7 +348,6 @@ public:
 	int protoLen,
 	u_char ttl,
 	u_short flagFrag = IP_DF,
-	u_char flags = 0,
 	bool badsum = false
     );
 
@@ -400,7 +400,7 @@ class IcmpProbeSock: public ProbeSock {
                                     const IcmpProbeSock& probe);
 
 private:
-    u_char icmpType;
+    u_char icmpType;		  // ICMP_ECHO, ICMP_TSTAMP, ...
     int icmphdrLen;
     u_short icmpId;
     u_short icmpSeq;
@@ -427,7 +427,6 @@ public:
     int buildProtocolHeader(
 	u_char *buf,
 	int protoLen,
-	u_char flags,
 	bool badsum
     );
 
@@ -479,7 +478,6 @@ public:
     int buildProtocolHeader(
 	u_char *buf,
 	int protoLen,
-	u_char flags,
 	bool badsum
     );
 
@@ -506,7 +504,8 @@ public:
 	u_char *buf = NULL,
 	uint16_t id = (u_short)time(0) & 0xffff,
 	uint32_t seq = 0,
-	uint32_t ack = 0
+	uint32_t ack = 0,
+	u_char flags = TH_SYN
     ):
 	ProbeSock(IPPROTO_TCP, mtu, src, dst, iplen, ipbuf, id),
 	tcpoptLen(len),
@@ -514,7 +513,8 @@ public:
 	sport(_sport),
 	dport(_dport),
 	tcpseq(seq),
-	tcpack(ack)
+	tcpack(ack),
+	tcpflags(flags)
 	{
         assert(len >= 0);
         if (len) {
@@ -542,7 +542,6 @@ public:
     int buildProtocolHeader(
 	u_char *buf,
 	int protoLen,
-	u_char flags,
 	bool badsum
     );
 
@@ -579,6 +578,7 @@ private:
     int tcphdrLen;
     u_short sport, dport;
     uint32_t tcpseq, tcpack;
+    u_char tcpflags;
 }; // class TcpProbeSock
 
 inline std::ostream& operator<<(std::ostream& output,
