@@ -570,6 +570,7 @@ int IcmpProbeSock::recvIcmp(const u_char *buf, const int len)
     type = icmp->icmp_type;
     code = icmp->icmp_code;
 
+
     if ((type == ICMP_TIMXCEED && code == ICMP_TIMXCEED_INTRANS) ||
         type == ICMP_UNREACH ||
 	type == ICMP_PARAMPROB) {
@@ -577,7 +578,7 @@ int IcmpProbeSock::recvIcmp(const u_char *buf, const int len)
         origip = (struct ip *)(buf + iplen + PROBE_ICMP_LEN);
         origiplen = origip->ip_hl << 2;
 
-        if (origip->ip_p != protocol)
+        if (origip->ip_p != IPPROTO_ICMP)
             return 0;
 
         // ICMP header + Original IP header + First 8 bytes of data field
@@ -658,9 +659,6 @@ int UdpProbeSock::recvIcmp(const u_char *buf, const int len)
 
         origip = (struct ip *)(buf + iplen + PROBE_ICMP_LEN);
         origiplen = origip->ip_hl << 2;
-
-        if (origip->ip_p != protocol)
-            return 0;
 
         // ICMP header + Original IP header + First 8 bytes of data field
         if (icmplen < PROBE_ICMP_LEN + origiplen + 8)
