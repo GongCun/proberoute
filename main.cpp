@@ -117,8 +117,8 @@ int main(int argc, char *argv[])
     bool found = false, unreachable = false;
     int code = 0, tcpcode = 0;
 
-    std::vector<ProbeSock> probeVec;
-    std::vector<ProbeSock>::iterator probe;
+    std::vector<ProbeSock *> probeVec;
+    std::vector<ProbeSock *>::iterator probe;
 
 
     // make std::cout and stdout unbuffered
@@ -192,7 +192,6 @@ int main(int argc, char *argv[])
 	    throw ProbeException("atexit");
 
 
-        msg = "";
 	for (std::vector<int>::size_type idx = 0; idx != protoVec.size(); ++idx) {
 	    switch (int protocol = protoVec[idx]) {
 	    case IPPROTO_TCP:
@@ -218,11 +217,13 @@ int main(int argc, char *argv[])
 			     addressInfo.getLocalSockaddrLen()) < 0)
 			throw ProbeException("bind");
 
-		    n = TcpProbeSock::nonbConn(connfd,
-					       addressInfo.getForeignSockaddr(),
-					       addressInfo.getForeignSockaddrLen(),
-					       waittime,
-					       0);
+		    n = TcpProbeSock::nonbConn(
+                        connfd,
+                        addressInfo.getForeignSockaddr(),
+                        addressInfo.getForeignSockaddrLen(),
+                        waittime,
+                        0
+                    );
 
 		    if (verbose > 1)
 			std::cerr << "nonbConn() returns " << n << " ("
@@ -310,28 +311,25 @@ int main(int argc, char *argv[])
 		if (fragsize)         // don't set tcp mss options
 		    tcplen = 0;
 
-		if (badlen) {
-		    probeVec.push_back(
-                        TcpProbeSock(
-                            mtu,
-                            src,
-                            dst,
-                            sport,
-                            dport,
-                            4,
-                            NULL,
-                            tcplen,
-                            tcpopt,
-                            ipid,
-                            seq,
-                            ack,
-                            tcpFlags
-                        )
+                ProbeSock *tcpProbe;
+		if (badlen)
+                    tcpProbe = new TcpProbeSock(
+                        mtu,
+                        src,
+                        dst,
+                        sport,
+                        dport,
+                        4,
+                        NULL,
+                        tcplen,
+                        tcpopt,
+                        ipid,
+                        seq,
+                        ack,
+                        tcpFlags
                     );
-		}
-		else {
-		    probeVec.push_back(
-                        TcpProbeSock(
+		else
+                    tcpProbe = new TcpProbeSock(
                             mtu,
                             src,
                             dst,
@@ -345,61 +343,63 @@ int main(int argc, char *argv[])
                             seq,
                             ack,
                             tcpFlags
-                        )
-		    );
-		}
+                    );
+
+                probeVec.push_back(tcpProbe);
 
 		break;                // case IPPROTO_TCP
 
 	    case IPPROTO_UDP:
+
+                UdpProbeSock *udpProbe;
+                
 		if (badlen)
-		    probeVec.push_back(
-                        UdpProbeSock(
-                            mtu,
-                            src,
-                            dst,
-                            sport,
-                            dport,
-                            4
-                        )
+                    udpProbe = new UdpProbeSock(
+                        mtu,
+                        src,
+                        dst,
+                        sport,
+                        dport,
+                        4
                     );
 		else
-		    probeVec.push_back(
-                        UdpProbeSock(
-                            mtu,
-                            src,
-                            dst,
-                            sport,
-                            dport,
-                            iplen,
-                            ipopt
-                        )
+                    udpProbe = new UdpProbeSock(
+                        mtu,
+                        src,
+                        dst,
+                        sport,
+                        dport,
+                        iplen,
+                        ipopt
 		    );
+
+                probeVec.push_back(udpProbe);
 
 		break;		  // case IPPROTO_UDP
 
 	    case IPPROTO_ICMP:
+
+                IcmpProbeSock *icmpProbe;
+                
 		if (badlen)
-		    probeVec.push_back(
-                        IcmpProbeSock(
-                            mtu,
-                            src,
-                            dst,
-                            icmpFlags,
-                            4
-                        )
+                    icmpProbe = new IcmpProbeSock(
+                        mtu,
+                        src,
+                        dst,
+                        icmpFlags,
+                        4
                     );
 		else
-		    probeVec.push_back(
-                        IcmpProbeSock(
-                            mtu,
-                            src,
-                            dst,
-                            icmpFlags,
-                            iplen,
-                            ipopt
-                        )
+                    icmpProbe = new IcmpProbeSock(
+                        mtu,
+                        src,
+                        dst,
+                        icmpFlags,
+                        iplen,
+                        ipopt
                     );
+
+                probeVec.push_back(icmpProbe);
 
 		break;		  // case IPPROTO_ICMP
 		
@@ -411,23 +411,23 @@ int main(int argc, char *argv[])
 
         if (verbose > 1) {
             for (probe = probeVec.begin(); probe != probeVec.end(); ++probe)
-                switch (probe->getProtocol()) {
+                switch ((*probe)->getProtocol()) {
                 case IPPROTO_TCP:
-		    if (TcpProbeSock *tcpProbe = dynamic_cast<TcpProbeSock *>(probe))
+		    if (TcpProbeSock *tcpProbe = dynamic_cast<TcpProbeSock *>(*probe))
 			std::cout << *tcpProbe << std::endl;
 		    else
 			throw std::bad_cast();
                     break;
 
                 case IPPROTO_UDP:
-		    if (UdpProbeSock *udpProbe = dynamic_cast<UdpProbeSock *>(probe))
+		    if (UdpProbeSock *udpProbe = dynamic_cast<UdpProbeSock *>(*probe))
 			std::cout << *udpProbe << std::endl;
 		    else
 			throw std::bad_cast();
                     break;
 
                 case IPPROTO_ICMP:
-                    if (IcmpProbeSock *icmpProbe = dynamic_cast<IcmpProbeSock *>(probe))
+                    if (IcmpProbeSock *icmpProbe = dynamic_cast<IcmpProbeSock *>(*probe))
                         std::cout << *icmpProbe << std::endl;
                     else 
                         throw std::bad_cast();
@@ -436,14 +436,14 @@ int main(int argc, char *argv[])
         }
 
         std::cout << "proberoute to " << host
-                  << " (" << inet_ntoa(probe->getDstAddr()) << ")";
-        std::cout << " from " << inet_ntoa(probe->getSrcAddr())
+                  << " (" << inet_ntoa(dst) << ")";
+        std::cout << " from " << inet_ntoa(src)
                   << " (" << addressInfo.getDevice() << ")"
                   << " with ";
         printProto();
         std::cout << " protocol" << std::endl;
         std::cout << firstttl << " hops min, " << maxttl << " hops max" << std::endl;
-        std::cout << "outgoing MTU = " << probe->getPmtu() << std::endl;
+        std::cout << "outgoing MTU = " << mtu << std::endl;
 	
 
 	//
@@ -466,17 +466,16 @@ int main(int argc, char *argv[])
 		   ({
 		       // the original traceroute(1) increments the destination UDP port 
                        for (probe = probeVec.begin(); probe != probeVec.end(); ++probe)
-                           switch (probe->getProtocol()) {
+                           switch ((*probe)->getProtocol()) {
                            case IPPROTO_UDP:
                                if (!service)
-                                   (dynamic_cast<UdpProbeSock *>(probe))->incrUdpPort();
+                                   (dynamic_cast<UdpProbeSock *>(*probe))->incrUdpPort();
                                break;
                                
                            case IPPROTO_ICMP: // increment icmp sequence number
-                               (dynamic_cast<IcmpProbeSock *>(probe))->incrIcmpSeq();
+                               (dynamic_cast<IcmpProbeSock *>(*probe))->incrIcmpSeq();
                                break;
                            }
-                       
 		   })
 	) {
             std::printf("%3d ", ttl);
@@ -485,26 +484,26 @@ int main(int argc, char *argv[])
 		    throw ProbeException("gettimeofday");
 
                 for (probe = probeVec.begin(); probe != probeVec.end(); ++probe) {
-                    int protocol = probe->getProtocol();
+                    int protocol = (*probe)->getProtocol();
 
                     if ((protocol == IPPROTO_TCP && tcpFlags == TH_SYN) ||
                         (protocol == IPPROTO_ICMP &&
                          (icmpFlags == ICMP_TSTAMP || icmpFlags == ICMP_TSTAMPREPLY)))
-                        packlen = probe->getProtocolHdrLen();
+                        packlen = (*probe)->getProtocolHdrLen();
                     else
-                        packlen = probe->getPmtu() - probe->getIphdrLen();
+                        packlen = (*probe)->getPmtu() - (*probe)->getIphdrLen();
 
-                    if (packlen < probe->getProtocolHdrLen())
+                    if (packlen < (*probe)->getProtocolHdrLen())
                         throw ProbeException("packet length too short", MSG);
 
                     if (fragsize) {
-                        probe->buildProtocolHeader(
+                        (*probe)->buildProtocolHeader(
                             buf,
                             packlen,
                             badsum
                         );
 
-                        probe->sendFragPacket(
+                        (*probe)->sendFragPacket(
                             buf,
                             packlen,
                             ttl,
@@ -514,7 +513,7 @@ int main(int argc, char *argv[])
                         );
                     }
                     else {
-                        len = probe->buildProtocolPacket(
+                        len = (*probe)->buildProtocolPacket(
                             buf,
                             packlen,
                             ttl,
@@ -522,7 +521,7 @@ int main(int argc, char *argv[])
                             badsum
                         );
 
-                        probe->sendPacket(
+                        (*probe)->sendPacket(
                             buf,
                             len,
                             0,
@@ -548,11 +547,11 @@ int main(int argc, char *argv[])
 		    assert(ptr != NULL);
                     for (probe = probeVec.begin(); probe != probeVec.end(); ++probe) {
                         
-                        if (code = probe->recvIcmp(ptr, caplen))
+                        if (code = (*probe)->recvIcmp(ptr, caplen))
                             goto endWait;
                         
-                        if (probe->getProtocol() == IPPROTO_TCP) {
-                            if (TcpProbeSock *tcpProbe = dynamic_cast<TcpProbeSock *>(probe)) {
+                        if ((*probe)->getProtocol() == IPPROTO_TCP) {
+                            if (TcpProbeSock *tcpProbe = dynamic_cast<TcpProbeSock *>(*probe)) {
                                 if (tcpcode = tcpProbe->recvTcp(ptr, caplen))
                                     goto endWait;
                             } else {
@@ -597,7 +596,7 @@ int main(int argc, char *argv[])
 			    break;
 
 			case 4:	  // ICMP_UNREACH_NEEDFRAG
-			    ss << "Need fragment (next MTU = " << probe->getPmtu() << ")";
+			    ss << "Need fragment (next MTU = " << (*probe)->getPmtu() << ")";
 			    s = verbose ? ss.str() : "!F";
                             unreachable = false;
 			    break;
@@ -668,12 +667,12 @@ int main(int argc, char *argv[])
 
 	    if (found || unreachable) {
                 for (probe = probeVec.begin();
-                     probe != probeVec.end() && probe->getProtocol() != IPPROTO_TCP;
+                     probe != probeVec.end() && (*probe)->getProtocol() != IPPROTO_TCP;
                      ++probe)
                     ;
                 
 		if (probe != probeVec.end() && tcpcode) {
-		    TcpProbeSock *tcpProbe = dynamic_cast<TcpProbeSock *>(probe);
+		    TcpProbeSock *tcpProbe = dynamic_cast<TcpProbeSock *>(*probe);
 		    if (!tcpProbe)
 			throw std::bad_cast();
 		    assert(dport == tcpProbe->getTcpDstPort());
@@ -708,10 +707,8 @@ int main(int argc, char *argv[])
 	    }
 	}
 
-        while (probe != probeVec.end()) {
-            close(probe->getRawfd());
-            probeVec.erase(probe);
-        }   
+        for (probe = probeVec.begin(); probe != probeVec.end(); ++probe)
+            free(*probe);
 	
     } catch (ProbeException &e) {
 	std::cerr << e.what() << std::endl;
