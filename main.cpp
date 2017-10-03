@@ -3,7 +3,6 @@
 
 sigjmp_buf jumpbuf;
 int verbose;
-// int protocol = IPPROTO_TCP;
 int srcport;
 const char *device;
 int nquery = 3;
@@ -191,6 +190,12 @@ int main(int argc, char *argv[])
 	if (atexit(Close) != 0)
 	    throw ProbeException("atexit");
 
+        bool haveTcp = false;
+	for (std::vector<int>::size_type idx = 0; idx != protoVec.size(); ++idx)
+            if (protoVec[idx] == IPPROTO_TCP) {
+                haveTcp = true;
+                break;
+            }
 
 	for (std::vector<int>::size_type idx = 0; idx != protoVec.size(); ++idx) {
 	    switch (int protocol = protoVec[idx]) {
@@ -352,14 +357,15 @@ int main(int argc, char *argv[])
 	    case IPPROTO_UDP:
 
                 UdpProbeSock *udpProbe;
-                
+
 		if (badlen)
                     udpProbe = new UdpProbeSock(
                         mtu,
                         src,
                         dst,
                         sport,
-                        dport,
+                        // classic base port number used in traceroute
+                        haveTcp ? 33434 : dport,
                         4
                     );
 		else
@@ -368,7 +374,8 @@ int main(int argc, char *argv[])
                         src,
                         dst,
                         sport,
-                        dport,
+                        // classic base port number used in traceroute
+                        haveTcp ? 33434 : dport,
                         iplen,
                         ipopt
 		    );
