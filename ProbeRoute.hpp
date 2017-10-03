@@ -463,10 +463,6 @@ public:
 	return icmpSeq;
     }
 
-    // inline void incrIcmpSeq() {
-	// ++icmpSeq;
-    // }
-
     virtual IcmpProbeSock& operator++() {
         ++ipid;
         ++icmpSeq;
@@ -512,12 +508,9 @@ public:
 	bool badsum
     );
 
-    // inline void incrUdpPort() {
-	// ++dport;
-    // }
-
     virtual UdpProbeSock& operator++() {
-        ++ipid;
+        // classic traceroute only increment the destination port
+        // ++ipid;
         ++dport;
         return *this;
     }
