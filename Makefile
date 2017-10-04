@@ -33,4 +33,4 @@ install: $(PROGS)
 	install -s -S -f ${DESTDIR}${BINDIR}/ -M 4755 -O root -G system ${PROGS}
 
 clean:
-	rm -f ${PROGS} *.o core *.BAK *~
+	rm -f ${PROGS} *.o core *.BAK *~ config.*
