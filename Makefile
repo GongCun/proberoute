@@ -10,7 +10,7 @@ include Makefile.gcc
 endif
 
 OBJS = main.o ProbeAddressInfo.o ProbeException.o ProbePcap.o ProbeSock.o \
-options.o getRouteInfo.o
+options.o
 
 PROGS = proberoute
 
@@ -18,9 +18,6 @@ all: ${PROGS}
 
 proberoute: $(OBJS) 
 	${CC} ${CFLAGS} -o $@ $^ $(LIBS)
-
-getRouteInfo.o: getRouteInfo.c
-	$(cc) $(CPPFLAGS) -c -o $@ $<
 
 %.o: %.cpp ProbeRoute.hpp config.h usage.h
 	$(CC) $(CPPFLAGS) -c -o $@ $<
