@@ -196,25 +196,28 @@ ProbeAddressInfo::ProbeAddressInfo(const char *foreignHost, const char *foreignS
     if (foreignService == NULL)
 	foreignService = "33434"; // default is 32768 + 666 = 33434
 
+    bzero(&localAddr, sizeof(struct sockaddr));
+    bzero(&foreignAddr, sizeof(struct sockaddr));
+
     if ((n = getaddrinfo(foreignHost, foreignService, &hints, &res)) != 0)
         throw ProbeException("getaddrinfo error", gai_strerror(n));
 
-    bzero(&localAddr, sizeof(struct sockaddr));
-    bzero(&foreignAddr, sizeof(struct sockaddr));
-    bzero(strDestination, sizeof(strDestination));
-    bzero(strGateway, sizeof(strGateway));
-    bzero(strDestinationMask, sizeof(strDestinationMask));
 
-    // Get destination, gateway and destinationMask
-    // paddr = (struct sockaddr_in *)&foreignAddr;
-    struct in_addr inaddr;
-    inet_aton(foreignHost, &inaddr);
-    getRouteInfo(&inaddr);
 
     sockfd = -1;
 
     for (curr = res; curr && sockfd < 0; curr = curr->ai_next)
 	if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) >= 0) {
+            // Get destination, gateway and netmask. To get the destination
+            // network and netmask, must writing and reading the routing socket
+            // before call connect().
+            bzero(strDestination, sizeof(strDestination));
+            bzero(strGateway, sizeof(strGateway));
+            bzero(strDestinationMask, sizeof(strDestinationMask));
+            paddr = (struct sockaddr_in *)curr->ai_addr;
+            getRouteInfo(&paddr->sin_addr);
+
+            // Get the outgoing interface.
 	    if (connect(sockfd, curr->ai_addr, curr->ai_addrlen) < 0) {
 		close(sockfd);
 		sockfd = -1;
@@ -230,10 +233,6 @@ ProbeAddressInfo::ProbeAddressInfo(const char *foreignHost, const char *foreignS
     foreignAddrLen = curr->ai_addrlen;
     memcpy(&foreignAddr, curr->ai_addr, foreignAddrLen);
     freeaddrinfo(res);
-
-    // Get destination, gateway and destinationMask
-    // paddr = (struct sockaddr_in *)&foreignAddr;
-    // getRouteInfo(&paddr->sin_addr);
 
     paddr = (struct sockaddr_in *)&localAddr;
     localAddrLen = sizeof(struct sockaddr_in);
@@ -404,9 +403,12 @@ void ProbeAddressInfo::getRouteInfo(const struct in_addr *addr) throw(ProbeExcep
     rtm = (struct rt_msghdr *)buf;
     sa = (struct sockaddr *)(rtm + 1);
 
-    // for (int i = 7; i >= 0; i--)
-        // std::cerr << ((rtm->rtm_addrs >> i) & 1);
-    // std::cerr << std::endl;
+    if (verbose > 2) {
+        std::cerr << "Routing socket bitmask: ";
+        for (int i = 7; i >= 0; i--)
+            std::cerr << ((rtm->rtm_addrs >> i) & 1);
+        std::cerr << std::endl;
+    }
     
     for (int i = 0; i < RTAX_MAX; ++i) {
         if (rtm->rtm_addrs & (1 << i)) { // bitmask identifying sockaddrs in msg
@@ -454,8 +456,7 @@ static const char *sock_ntop(const struct sockaddr *sa, char *buf, const ssize_t
     }
 #endif
     default:
-        std::snprintf(buf, size, "unknown AF_xxx: %d",
-                      sa->sa_family);
+        std::snprintf(buf, size, "AF_xxx = %d", sa->sa_family);
         return buf;
     }
 
@@ -466,6 +467,7 @@ static const char *mask_ntop(const struct sockaddr *sa, char *buf, const ssize_t
 {
     const unsigned char *ptr = (unsigned char *)&sa->sa_data[2];
     
+    // fprintf(stderr, "! mask length = %d\n", sa->sa_len);
     switch (sa->sa_len) {
     case 0: 
     {
@@ -494,6 +496,8 @@ static const char *mask_ntop(const struct sockaddr *sa, char *buf, const ssize_t
         return buf;
     }
     default:
+        // If sa_len is 255, means the local interface mask, for simplicity, we
+        // don't use ioctl to get local interfaces again.
         std::snprintf(buf, size, "unknown mask");
         return buf;
     }
