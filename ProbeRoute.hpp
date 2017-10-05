@@ -28,6 +28,8 @@
 /* Get interface MTU */
 #include <sys/ioctl.h>
 #include <net/if.h>		/* struct ifreq */
+#include <net/if_dl.h>		/* struct ifreq */
+#include <net/route.h>		/* struct rt_msghdr */
 
 #include <netinet/ip.h>
 #include <netinet/ip_icmp.h>
@@ -190,11 +192,14 @@ class ProbeAddressInfo {
 
 private:
     // Raw address portion of this object
-    sockaddr localAddr, foreignAddr;
+    struct sockaddr localAddr, foreignAddr;
     socklen_t localAddrLen, foreignAddrLen;
     std::string device;
     u_short devMtu;
     bool sameLan;
+    char strDestination[INET_ADDRSTRLEN];
+    char strGateway[INET_ADDRSTRLEN];
+    char strDestinationMask[INET_ADDRSTRLEN];
 
     // the device information element
     struct deviceInfo {
@@ -256,6 +261,7 @@ public:
     void getDeviceInfo() throw(ProbeException);
     void freeDeviceInfo();
     void printDeviceInfo();
+    void getRouteInfo() throw(ProbeException);
  
 };
 
@@ -274,6 +280,9 @@ inline std::ostream& operator<<(std::ostream &output,
            << std::endl;
     output << "device: " << address.device << std::endl;
     output << "mtu: " << address.devMtu << std::endl;
+    output << "destination: " << address.strDestination << std::endl;
+    output << "gateway: " << address.strGateway << std::endl;
+    output << "netmask: " << address.strDestinationMask << std::endl;
     output << (address.sameLan ? "in the same lan" : "not in the same lan");
 
     return output;
