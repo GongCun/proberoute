@@ -450,9 +450,15 @@ default:
                   << " with ";
         printProto();
         std::cout << " protocol" << std::endl;
+
+        std::cout << "destination: " << addressInfo.getDestination() << ", "
+                  << "gateway: " << addressInfo.getGateway();
+        if (addressInfo.getDestinationMask()[0] != 0)
+            std::cout << ", mask: " << addressInfo.getDestinationMask();
+        std::cout << std::endl;
+	
         std::cout << firstttl << " hops min, " << maxttl << " hops max" << std::endl;
         std::cout << "outgoing MTU = " << mtu << std::endl;
-	
 
 	//
 	// Send the probe and obtain the router/host IP
