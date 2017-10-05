@@ -205,6 +205,12 @@ ProbeAddressInfo::ProbeAddressInfo(const char *foreignHost, const char *foreignS
     bzero(strGateway, sizeof(strGateway));
     bzero(strDestinationMask, sizeof(strDestinationMask));
 
+    // Get destination, gateway and destinationMask
+    // paddr = (struct sockaddr_in *)&foreignAddr;
+    struct in_addr inaddr;
+    inet_aton(foreignHost, &inaddr);
+    getRouteInfo(&inaddr);
+
     sockfd = -1;
 
     for (curr = res; curr && sockfd < 0; curr = curr->ai_next)
@@ -226,8 +232,8 @@ ProbeAddressInfo::ProbeAddressInfo(const char *foreignHost, const char *foreignS
     freeaddrinfo(res);
 
     // Get destination, gateway and destinationMask
-    paddr = (struct sockaddr_in *)&foreignAddr;
-    getRouteInfo(&paddr->sin_addr);
+    // paddr = (struct sockaddr_in *)&foreignAddr;
+    // getRouteInfo(&paddr->sin_addr);
 
     paddr = (struct sockaddr_in *)&localAddr;
     localAddrLen = sizeof(struct sockaddr_in);
@@ -458,12 +464,12 @@ static const char *sock_ntop(const struct sockaddr *sa, char *buf, const ssize_t
 
 static const char *mask_ntop(const struct sockaddr *sa, char *buf, const ssize_t size)
 {
-    const char *ptr = &sa->sa_data[2];
+    const unsigned char *ptr = (unsigned char *)&sa->sa_data[2];
     
     switch (sa->sa_len) {
     case 0: 
     {
-        std::snprintf(buf, size, "a.0.0.0.0");
+        std::snprintf(buf, size, "0.0.0.0");
         return buf;
     }
     case 5:
