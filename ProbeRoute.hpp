@@ -28,7 +28,7 @@
 /* Get interface MTU */
 #include <sys/ioctl.h>
 #include <net/if.h>		/* struct ifreq */
-#include <net/if_dl.h>		/* struct ifreq */
+#include <net/if_dl.h>		/* struct sockaddr_dl */
 #include <net/route.h>		/* struct rt_msghdr */
 
 #include <netinet/ip.h>
@@ -82,6 +82,16 @@
 #define PROBE_UDP_LEN 8		 // UDP header length 
 #define PROBE_ICMP_LEN 8	 // ICMP header length 
 #define MAX_GATEWAY 9		 // Maximum source route records
+
+extern "C" {
+    void getRouteInfo(
+        struct in_addr *,
+        char *,
+        char *,
+        char *
+    );
+}
+    
 
 extern sigjmp_buf jumpbuf;
 extern int verbose;
@@ -261,7 +271,6 @@ public:
     void getDeviceInfo() throw(ProbeException);
     void freeDeviceInfo();
     void printDeviceInfo();
-    void getRouteInfo() throw(ProbeException);
  
 };
 

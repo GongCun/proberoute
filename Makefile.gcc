@@ -1,4 +1,5 @@
 CC = c++
+cc := gcc
 override CFLAGS += -Wall -g
 override CPPFLAGS += -Wall -g
 override LIBS += -lpcap -lpopt

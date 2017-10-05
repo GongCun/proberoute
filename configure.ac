@@ -27,6 +27,12 @@ AC_CHECK_HEADERS([arpa/inet.h fcntl.h netdb.h netinet/in.h stdlib.h strings.h sy
 ##AC_TYPE_SSIZE_T
 ##AC_TYPE_UINT16_T
 ##AC_TYPE_UINT32_T
+AC_CHECK_TYPE([struct sockaddr_dl],
+AC_DEFINE(HAVE_SOCKADDR_DL_STRUCT, 1, Define to 1 if <net/if_dl.h> defines struct sockaddr_dl),,[
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <net/if_dl.h>
+])
 
 AC_CHECK_MEMBERS([struct ifreq.ifr_mtu], [], [],
 [#include <sys/types.h>

@@ -10,7 +10,7 @@ include Makefile.gcc
 endif
 
 OBJS = main.o ProbeAddressInfo.o ProbeException.o ProbePcap.o ProbeSock.o \
-options.o
+options.o getRouteInfo.o
 
 PROGS = proberoute
 
@@ -18,6 +18,9 @@ all: ${PROGS}
 
 proberoute: $(OBJS) 
 	${CC} ${CFLAGS} -o $@ $^ $(LIBS)
+
+getRouteInfo.o: getRouteInfo.c
+	$(cc) $(CPPFLAGS) -c -o $@ $<
 
 %.o: %.cpp ProbeRoute.hpp config.h usage.h
 	$(CC) $(CPPFLAGS) -c -o $@ $<
@@ -33,4 +36,4 @@ install: $(PROGS)
 	install -s -S -f ${DESTDIR}${BINDIR}/ -M 4755 -O root -G system ${PROGS}
 
 clean:
-	rm -f ${PROGS} *.o core *.BAK *~ config.*
+	rm -f ${PROGS} *.o core *.BAK *~ usage.h
