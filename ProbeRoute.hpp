@@ -83,15 +83,6 @@
 #define PROBE_ICMP_LEN 8	 // ICMP header length 
 #define MAX_GATEWAY 9		 // Maximum source route records
 
-extern "C" {
-    void getRouteInfo(
-        struct in_addr *,
-        char *,
-        char *,
-        char *
-    );
-}
-    
 
 extern sigjmp_buf jumpbuf;
 extern int verbose;
@@ -266,11 +257,25 @@ public:
     bool isSameLan() const {
         return sameLan;
     }
+
+    const char *getGateway() const {
+        return strGateway;
+    }
+            
+    const char *getDestination() const {
+        return strDestination;
+    }
+
+    const char *getDestinationMask() const {
+        return strDestinationMask;
+    }
+            
             
     struct deviceInfo *deviceInfoList; // the entry of device linked list
     void getDeviceInfo() throw(ProbeException);
     void freeDeviceInfo();
     void printDeviceInfo();
+    void getRouteInfo(const struct in_addr *) throw(ProbeException);
  
 };
 
@@ -289,9 +294,16 @@ inline std::ostream& operator<<(std::ostream &output,
            << std::endl;
     output << "device: " << address.device << std::endl;
     output << "mtu: " << address.devMtu << std::endl;
-    output << "destination: " << address.strDestination << std::endl;
-    output << "gateway: " << address.strGateway << std::endl;
-    output << "netmask: " << address.strDestinationMask << std::endl;
+
+    if (address.strDestination[0] != 0)
+        output << "destination: " << address.strDestination << std::endl;
+
+    if (address.strGateway[0] != 0)
+        output << "gateway: " << address.strGateway << std::endl;
+
+    if (address.strDestinationMask[0] != 0)
+        output << "netmask: " << address.strDestinationMask << std::endl;
+
     output << (address.sameLan ? "in the same lan" : "not in the same lan");
 
     return output;
