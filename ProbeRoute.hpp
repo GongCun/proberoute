@@ -414,6 +414,14 @@ public:
         return pmtu;
     }
 
+    void setPmtu(u_short mtu) {
+        pmtu = mtu;
+    }
+    void setPmtu(int mtu) {
+        pmtu = (u_short)mtu;
+    }
+                
+
     in_addr getSrcAddr() const {
 	return srcAddr;
     }
