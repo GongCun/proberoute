@@ -27,6 +27,9 @@ AC_CHECK_HEADERS([arpa/inet.h fcntl.h netdb.h netinet/in.h stdlib.h strings.h sy
 ##AC_TYPE_SSIZE_T
 ##AC_TYPE_UINT16_T
 ##AC_TYPE_UINT32_T
+AH_TEMPLATE([HAVE_SOCKADDR_DL_STRUCT],
+[Undefine if do not have struct sockaddr_dl.])
+
 AC_CHECK_TYPE([struct sockaddr_dl],
 AC_DEFINE(HAVE_SOCKADDR_DL_STRUCT, 1, Define to 1 if <net/if_dl.h> defines struct sockaddr_dl),,[
 #include <sys/types.h>
@@ -77,8 +80,11 @@ if test $ac_cv_ipv6 = yes; then
 	AC_DEFINE([IPv6], 1, [Define to 1 if the system supports IPv6])
 fi
 
-OS=`uname -s | tr '[:lower:]' '[:upper:]'`
 dnl checking for pcap_freecode support
+AH_TEMPLATE([HAVE_PCAP_FREECODE],
+[Undefine if do not have function pcap_freecode.])
+
+OS=`uname -s | tr '[:lower:]' '[:upper:]'`
 AC_MSG_CHECKING(for pcap_freecode support)
 OLD_CFLAGS="$CFLAGS"
 CFLAGS=-D_$OS
@@ -99,6 +105,9 @@ if test x"$have_pcap_freecode" = x"yes"; then
 fi
 
 dnl checking for pcap_close support
+AH_TEMPLATE([HAVE_PCAP_CLOSE],
+[Undefine if do not have function pcap_close.])
+
 AC_MSG_CHECKING(for pcap_close support)
 CFLAGS=-D_$OS
 AC_LANG(C)
