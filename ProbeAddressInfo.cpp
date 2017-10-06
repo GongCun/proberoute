@@ -350,6 +350,7 @@ extern "C" {
     static const char *mask_ntop(const struct sockaddr *sa, char *buf, const ssize_t size);
 }
 
+#ifndef _LINUX
 void ProbeAddressInfo::getRouteInfo(const struct in_addr *addr) throw(ProbeException)
 {
     int sockfd;
@@ -437,6 +438,12 @@ void ProbeAddressInfo::getRouteInfo(const struct in_addr *addr) throw(ProbeExcep
 
     free(buf);
 }
+#else
+void ProbeAddressInfo::getRouteInfo(const struct in_addr *addr) throw(ProbeException)
+{
+}
+#endif
+
 
 static const char *sock_ntop(const struct sockaddr *sa, char *buf, const ssize_t size)
 {
@@ -468,9 +475,16 @@ static const char *sock_ntop(const struct sockaddr *sa, char *buf, const ssize_t
 static const char *mask_ntop(const struct sockaddr *sa, char *buf, const ssize_t size)
 {
     const unsigned char *ptr = (unsigned char *)&sa->sa_data[2];
+
+    uint8_t n;
+#ifdef HAVE_SOCKADDR_SA_LEN
+    n = sa->sa_len;
+#else
+    n = sizeof(*sa);
+#endif
     
     // fprintf(stderr, "! mask length = %d\n", sa->sa_len);
-    switch (sa->sa_len) {
+    switch (n) {
     case 0: 
     {
         snprintf(buf, size, "0.0.0.0");
@@ -512,7 +526,7 @@ static const ssize_t ROUNDUP(const ssize_t a, const ssize_t size)
     // Round up 'a' to next multiple of 'size', which must be a power of 2
     assert(a > 0 && size > 0);
     if (a & (size - 1))
-        return 1 + (a | size - 1);
+        return 1 + (a | (size - 1));
  
     return a;
 }
