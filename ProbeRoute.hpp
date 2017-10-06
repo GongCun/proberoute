@@ -28,7 +28,9 @@
 /* Get interface MTU */
 #include <sys/ioctl.h>
 #include <net/if.h>		/* struct ifreq */
+#ifdef HAVE_SOCKADDR_DL_STRUCT
 #include <net/if_dl.h>		/* struct sockaddr_dl */
+#endif
 #include <net/route.h>		/* struct rt_msghdr */
 
 #include <netinet/ip.h>
