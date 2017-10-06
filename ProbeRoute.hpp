@@ -317,17 +317,35 @@ private:
     const std::string DEV;
     const std::string CMD;
     struct bpf_program bpfCode;
+    static ProbePcap* _instance;
+
+protected:
+    ProbePcap(const char *,
+	      const char *) throw(ProbeException);
+    
 public:
+    // Singleton
+    static ProbePcap* Instance(const char *,
+			       const char *) throw(ProbeException);
+
+    static void resetInstance() {
+	if (_instance) {
+	    delete _instance;
+	    _instance = NULL;
+	}
+    }
+    
     ~ProbePcap() {
 #ifdef HAVE_PCAP_CLOSE
         pcap_close(handle);
 #elif defined HAVE_PCAP_FREECODE
         pcap_freecode(&bpfCode);
 #endif
+	// delete _instance;
+	// _instance = NULL;
 	// std::cerr << "EXIT PCAP" << std::endl;
     }
-    ProbePcap(const char *,
-	      const char *) throw(ProbeException);
+
     const u_char *nextPcap(int *len);
 }; // class ProbePcap
 
