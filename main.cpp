@@ -360,17 +360,19 @@ int main(int argc, char *argv[])
 
 		if (badlen)
                     udpProbe = new UdpProbeSock(
-                        mtu,
+                        // default packet size used in traceroute is 52 bytes
+                        protoVec.size() == 1 ? mtu : 52,
                         src,
                         dst,
                         sport,
-                        // classic base port number used in traceroute
+                        // base port number used in traceroute
                         haveTcp ? 33434 : dport,
                         4
                     );
 		else
                     udpProbe = new UdpProbeSock(
-                        mtu,
+                        // default packet size used in traceroute is 52 bytes
+                        protoVec.size() == 1 ? mtu : 52,
                         src,
                         dst,
                         sport,
@@ -491,11 +493,21 @@ default:
 		    throw ProbeException("gettimeofday");
 
                 // Since some probe's mtu may be updated, should synchronize to
-                // all probes.
+                // all probes except the UDP default packet size (52-byte).
 
-                for (probe = probeVec.begin(); probe != probeVec.end(); ++probe)
+                for (probe = probeVec.begin(); probe != probeVec.end(); ++probe) {
+                    if ((*probe)->getProtocol() == IPPROTO_UDP && protoVec.size() != 1)
+                        continue;
                     if (mtu > (*probe)->getPmtu())
                         mtu = (*probe)->getPmtu();
+                }
+                
+                for (probe = probeVec.begin(); probe != probeVec.end(); ++probe) {
+                    if ((*probe)->getProtocol() == IPPROTO_UDP && protoVec.size() != 1)
+                        continue;
+                    if (mtu < (*probe)->getPmtu())
+                        (*probe)->setPmtu(mtu);
+                }
 
                 for (probe = probeVec.begin(); probe != probeVec.end(); ++probe) {
                     int protocol = (*probe)->getProtocol();
@@ -505,8 +517,8 @@ default:
                          (icmpFlags == ICMP_TSTAMP || icmpFlags == ICMP_TSTAMPREPLY)))
                         packlen = (*probe)->getProtocolHdrLen();
                     else
-                        // packlen = (*probe)->getPmtu() - (*probe)->getIphdrLen();
-                        packlen = mtu - (*probe)->getIphdrLen();
+                        packlen = (*probe)->getPmtu() - (*probe)->getIphdrLen();
+                        // packlen = mtu - (*probe)->getIphdrLen();
 
                     if (packlen < (*probe)->getProtocolHdrLen())
                         throw ProbeException("packet length too short", MSG);
