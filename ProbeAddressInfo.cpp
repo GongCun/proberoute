@@ -345,8 +345,10 @@ ProbeAddressInfo::ProbeAddressInfo(const char *foreignHost, const char *foreignS
  */
 
 static struct sockaddr *NEXT_SA(const struct sockaddr *sa);
-static const char *sock_ntop(const struct sockaddr *sa, char *buf, const ssize_t size);
-static const char *mask_ntop(const struct sockaddr *sa, char *buf, const ssize_t size);
+extern "C" {
+    static const char *sock_ntop(const struct sockaddr *sa, char *buf, const ssize_t size);
+    static const char *mask_ntop(const struct sockaddr *sa, char *buf, const ssize_t size);
+}
 
 void ProbeAddressInfo::getRouteInfo(const struct in_addr *addr) throw(ProbeException)
 {
@@ -404,7 +406,7 @@ void ProbeAddressInfo::getRouteInfo(const struct in_addr *addr) throw(ProbeExcep
     sa = (struct sockaddr *)(rtm + 1);
 
     if (verbose > 2) {
-        std::cerr << "Routing socket bitmask: ";
+        std::cerr << "routing socket bitmask: ";
         for (int i = 7; i >= 0; i--)
             std::cerr << ((rtm->rtm_addrs >> i) & 1);
         std::cerr << std::endl;
@@ -451,12 +453,12 @@ static const char *sock_ntop(const struct sockaddr *sa, char *buf, const ssize_t
 #ifdef HAVE_SOCKADDR_DL_STRUCT
     case AF_LINK:
     {
-        std::snprintf(buf, size, "AF_LINK");
+        snprintf(buf, size, "AF_LINK");
         return buf;
     }
 #endif
     default:
-        std::snprintf(buf, size, "AF_xxx = %d", sa->sa_family);
+        snprintf(buf, size, "AF_xxx = %d", sa->sa_family);
         return buf;
     }
 
@@ -471,34 +473,34 @@ static const char *mask_ntop(const struct sockaddr *sa, char *buf, const ssize_t
     switch (sa->sa_len) {
     case 0: 
     {
-        std::snprintf(buf, size, "0.0.0.0");
+        snprintf(buf, size, "0.0.0.0");
         return buf;
     }
     case 5:
     {
-        std::snprintf(buf, size, "%d.0.0.0", *ptr);
+        snprintf(buf, size, "%d.0.0.0", *ptr);
         return buf;
     }
     case 6:
     {
-        std::snprintf(buf, size, "%d.%d.0.0", *ptr, *(ptr + 1));
+        snprintf(buf, size, "%d.%d.0.0", *ptr, *(ptr + 1));
         return buf;
     }
     case 7:
     {
-        std::snprintf(buf, size, "%d.%d.%d.0", *ptr, *(ptr + 1), *(ptr + 2));
+        snprintf(buf, size, "%d.%d.%d.0", *ptr, *(ptr + 1), *(ptr + 2));
         return buf;
     }
     case 8:
     {
-        std::snprintf(buf, size, "%d.%d.%d.%d", *ptr, *(ptr + 1), *(ptr + 2),
+        snprintf(buf, size, "%d.%d.%d.%d", *ptr, *(ptr + 1), *(ptr + 2),
                  *(ptr + 3));
         return buf;
     }
     default:
         // If sa_len is 255, means the local interface mask, for simplicity, we
         // don't use ioctl to get local interfaces again.
-        std::snprintf(buf, size, "unknown mask");
+        snprintf(buf, size, "unknown mask");
         return buf;
     }
 
