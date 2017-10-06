@@ -116,6 +116,8 @@ int main(int argc, char *argv[])
     bool found = false, unreachable = false;
     int code = 0, tcpcode = 0;
 
+    static ProbePcap* capture;
+
     std::vector<ProbeSock *> probeVec;
     std::vector<ProbeSock *>::iterator probe;
 
@@ -243,7 +245,7 @@ int main(int argc, char *argv[])
 			// the write() packet arriving to remote host, we need to set the
 			// TTL to 1.
 
-			ProbePcap capture(addressInfo.getDevice().c_str(), "tcp");
+			capture = ProbePcap::Instance(addressInfo.getDevice().c_str(), "tcp");
 
 			optlen = sizeof(origttl);
 			if (getsockopt(connfd, IPPROTO_IP, IP_TTL, &origttl, &optlen) < 0)
@@ -258,7 +260,7 @@ int main(int argc, char *argv[])
 		    
 			// capture the write() packet immediately or when it retransmit
 			for ( ; ; ) {
-			    ptr = capture.nextPcap(&caplen);
+			    ptr = capture->nextPcap(&caplen);
 			    assert(ptr);
 			    if (TcpProbeSock::capWrite(
 				    ptr,
@@ -465,13 +467,14 @@ default:
 	//
 	// Send the probe and obtain the router/host IP
 	// 
-        ProbePcap capture(addressInfo.getDevice().c_str(),
-                          "tcp or "
-			  "icmp[0:1] == 0  or "  // Echo Reply
-			  "icmp[0:1] == 3  or "  // Destination Unreachable
-			  "icmp[0:1] == 11 or "  // Time Exceed
-			  "icmp[0:1] == 12 or "	 // Parameter Problem
-			  "icmp[0:1] == 14"	 // Timestamp Reply
+	ProbePcap::resetInstance();
+        capture = ProbePcap::Instance(addressInfo.getDevice().c_str(),
+				      "tcp or "
+				      "icmp[0:1] == 0  or "  // Echo Reply
+				      "icmp[0:1] == 3  or "  // Destination Unreachable
+				      "icmp[0:1] == 11 or "  // Time Exceed
+				      "icmp[0:1] == 12 or "  // Parameter Problem
+				      "icmp[0:1] == 14"	     // Timestamp Reply
 	);
 
 	bzero(buf, sizeof(buf));
@@ -571,7 +574,7 @@ default:
 
                 msg = "";
 		for ( ; ; ) {
-		    ptr = capture.nextPcap(&caplen);
+		    ptr = capture->nextPcap(&caplen);
 		    assert(ptr != NULL);
                     for (probe = probeVec.begin(); probe != probeVec.end(); ++probe) {
                         
