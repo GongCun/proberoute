@@ -49,6 +49,15 @@ ProbePcap::ProbePcap(const char *dev,
     }
 }
 
+ProbePcap* ProbePcap::_instance = NULL;
+ProbePcap* ProbePcap::Instance(const char *dev, const char *cmd) throw(ProbeException)
+{
+    if (_instance == NULL) {
+	_instance = new ProbePcap(dev, cmd);
+    }
+    return _instance;
+}
+
 
 static void sig_alrm(int signo) throw(ProbeException)
 {
