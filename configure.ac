@@ -29,6 +29,11 @@ AC_CHECK_HEADERS([arpa/inet.h fcntl.h netdb.h netinet/in.h stdlib.h strings.h sy
 ##AC_TYPE_UINT32_T
 AH_TEMPLATE([HAVE_SOCKADDR_DL_STRUCT],
 [Undefine if do not have struct sockaddr_dl.])
+AH_TEMPLATE([HAVE_RT_MSGHDR_STRUCT],
+[Undefine if do not have struct rt_msghdr.])
+AH_TEMPLATE([HAVE_RTMSG_STRUCT],
+[Undefine if do not have struct rtmsg.])
+
 AC_CHECK_TYPE([struct sockaddr_dl],
 AC_DEFINE(HAVE_SOCKADDR_DL_STRUCT, 1, Define to 1 if <net/if_dl.h> defines struct sockaddr_dl),,[
 #include <sys/types.h>
@@ -36,8 +41,6 @@ AC_DEFINE(HAVE_SOCKADDR_DL_STRUCT, 1, Define to 1 if <net/if_dl.h> defines struc
 #include <net/if_dl.h>
 ])
 
-AH_TEMPLATE([HAVE_RT_MSGHDR_STRUCT],
-[Undefine if do not have struct rt_msghdr.])
 AC_CHECK_TYPE([struct rt_msghdr],
 AC_DEFINE(HAVE_RT_MSGHDR_STRUCT, 1, Define to 1 if <net/route.h> defines struct rt_msghdr),,[
 #include <sys/types.h>
@@ -45,8 +48,6 @@ AC_DEFINE(HAVE_RT_MSGHDR_STRUCT, 1, Define to 1 if <net/route.h> defines struct 
 #include <net/route.h>
 ])
 
-AH_TEMPLATE([HAVE_RTMSG_STRUCT],
-[Undefine if do not have struct rtmsg.])
 AC_CHECK_TYPE([struct rtmsg],
 AC_DEFINE(HAVE_RTMSG_STRUCT, 1, Define to 1 if <linux/rtnetlink.h> defines struct rtmsg),,[
 #include <asm/types.h>
