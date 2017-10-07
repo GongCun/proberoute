@@ -3,7 +3,6 @@
 
 sigjmp_buf jumpbuf;
 int verbose;
-int protocol = IPPROTO_TCP;
 int srcport;
 const char *device;
 int nquery = 3;
@@ -14,7 +13,9 @@ int mtu;
 int conn;
 int badsum, badlen;
 const char *host, *service, *srcip;
-u_char flags = TH_SYN;
+u_char tcpFlags = TH_SYN;
+u_char icmpFlags = ICMP_ECHO;
+std::vector<int> protoVec;
 
 int connfd = -1;
 int origttl;
@@ -32,12 +33,41 @@ static void sig_exit(int signo)
     exit(1);
 }
 
+static void printProto()
+{
+    for (std::vector<int>::size_type i = 0; i != protoVec.size(); ++i) {
+        if (i != 0)
+            std::cout << ' ';
+                         
+	switch (protoVec[i]) {
+	case IPPROTO_TCP:
+            std::cout << "TCP";
+	    break;
+	case IPPROTO_UDP:
+            std::cout << "UDP";
+	    break;
+	case IPPROTO_ICMP:
+            std::cout << "ICMP";
+	    break;
+	default:
+            std::cout << "unknown";
+	    break;
+	}
+    }
+}
+ 
+
 static void printOpts()
 {
+    std::string s;
     std::cout << ">>>> Parse Options <<<<" << std::endl;
     
     printOpt(verbose);
-    printOpt(protocol);
+    // printOpt(protocol);
+    std::cout << "protocol: ";
+    printProto();
+    std::cout << std::endl;
+	    
     printOpt(srcport);
     printOptStr(device);
     printOpt(nquery);
@@ -53,13 +83,13 @@ static void printOpts()
     printOptStr(service);
     printOptStr(srcip);
 
-    std::cout << "flags: ";
-    if (protocol == IPPROTO_TCP)  // Flags (UAPRSF)
-	for (int i = 5; i >= 0; i--)
-	    std::cout << ((flags >> i) & 1);
-    else
-	std::cout << flags;
+    // TCP Flags (UAPRSF)
+    std::cout << "tcpFlags: ";
+    for (int i = 5; i >= 0; i--)
+	std::cout << ((tcpFlags >> i) & 1);
     std::cout << std::endl;
+
+    std::printf("icmpFlags: %d\n", icmpFlags);
     
     std::cout << ">>>> End <<<<" << std::endl;
 }
@@ -80,13 +110,17 @@ int main(int argc, char *argv[])
     double rtt;
     int caplen, len, iplen = 0, tcplen = 0, packlen;
     u_short sport, dport;
-    uint16_t ipid = (u_short)time(0) & 0xffff;
+    uint16_t ipid = (u_short)Rand() & 0xffff;
     uint32_t seq = 0, ack = 0;
     u_char buf[MAX_MTU];
     bool found = false, unreachable = false;
     int code = 0, tcpcode = 0;
 
-    ProbeSock *probe;
+    static ProbePcap* capture;
+
+    std::vector<ProbeSock *> probeVec;
+    std::vector<ProbeSock *>::iterator probe;
+
 
     // make std::cout and stdout unbuffered
     std::cout.setf(std::ios::unitbuf);
@@ -101,14 +135,6 @@ int main(int argc, char *argv[])
 
     if (verbose > 2)
 	printOpts();
-
-    if (
-	protocol == IPPROTO_ICMP &&
-	!(flags == ICMP_ECHO || flags == ICMP_ECHOREPLY ||
-	  flags == ICMP_TSTAMP || flags == ICMP_TSTAMPREPLY)
-    )
-	flags = ICMP_ECHO;	  // Default ICMP type is Echo
-    
 
     try {
 	ProbeAddressInfo addressInfo(host, service, srcip, srcport, device, mtu);
@@ -163,307 +189,378 @@ int main(int argc, char *argv[])
 	    if (signal(signo[i], sig_exit) == SIG_ERR)
 		throw ProbeException("signal");
 
-	switch (protocol) {
-	case IPPROTO_TCP:
-	    if (conn && !addressInfo.isSameLan()) { // no need use connect probe in the
-						    // same LAN
-		if ((connfd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
-		    throw ProbeException("socket");
+	if (atexit(Close) != 0)
+	    throw ProbeException("atexit");
 
-		// Must abort the connection immediately when it is closed, to ensure the
-		// write() packet wouldn't arrive to the target host.
-		linger.l_onoff = 1, linger.l_linger = 0;
-		if (setsockopt(connfd, SOL_SOCKET, SO_LINGER, &linger, sizeof(linger)) < 0)
-		    throw ProbeException("setsockopt SO_LINGER");
+        bool haveTcp = false;
+	for (std::vector<int>::size_type idx = 0; idx != protoVec.size(); ++idx)
+            if (protoVec[idx] == IPPROTO_TCP) {
+                haveTcp = true;
+                break;
+            }
 
-		if (setsockopt(connfd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)) < 0)
-		    throw ProbeException("setsockopt SO_REUSEADDR");
+	for (std::vector<int>::size_type idx = 0; idx != protoVec.size(); ++idx) {
+	    switch (int protocol = protoVec[idx]) {
+	    case IPPROTO_TCP:
+		if (conn && !addressInfo.isSameLan()) { // no need use connect probe in the
+		    // same LAN
+		    if ((connfd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
+			throw ProbeException("socket");
+
+		    // Must abort the connection immediately when it is closed, to ensure the
+		    // write() packet wouldn't arrive to the target host.
+		    linger.l_onoff = 1, linger.l_linger = 0;
+		    if (setsockopt(connfd, SOL_SOCKET, SO_LINGER, &linger, sizeof(linger)) < 0)
+			throw ProbeException("setsockopt SO_LINGER");
+
+		    if (setsockopt(connfd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)) < 0)
+			throw ProbeException("setsockopt SO_REUSEADDR");
 #ifdef SO_REUSEPORT
-		if (setsockopt(connfd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)) < 0)
-		    throw ProbeException("setsockopt SO_REUSEPORT");
+		    if (setsockopt(connfd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)) < 0)
+			throw ProbeException("setsockopt SO_REUSEPORT");
 #endif
-		// Bind local address and specified port
-		if (bind(connfd, addressInfo.getLocalSockaddr(),
-			 addressInfo.getLocalSockaddrLen()) < 0)
-		    throw ProbeException("bind");
+		    // Bind local address and specified port
+		    if (bind(connfd, addressInfo.getLocalSockaddr(),
+			     addressInfo.getLocalSockaddrLen()) < 0)
+			throw ProbeException("bind");
 
-		n = TcpProbeSock::nonbConn(connfd,
-					   addressInfo.getForeignSockaddr(),
-					   addressInfo.getForeignSockaddrLen(),
-					   waittime,
-					   0);
+		    n = TcpProbeSock::nonbConn(
+                        connfd,
+                        addressInfo.getForeignSockaddr(),
+                        addressInfo.getForeignSockaddrLen(),
+                        waittime,
+                        0
+                    );
 
-		if (verbose > 1)
-		    std::cerr << "nonbConn() returns " << n << " ("
-			      << (n < 0 ? "failed" :
-                                  n == 0 ? "succeed" :
-                                  n == 1 ? "refused" :
-                                  n == 2 ? "timed out" : "unknown state")
-			      << ")" << std::endl;
+		    if (verbose > 1)
+			std::cerr << "nonbConn() returns " << n << " ("
+				  << (n < 0 ? "failed" :
+				      n == 0 ? "succeed" :
+				      n == 1 ? "refused" :
+				      n == 2 ? "timed out" : "unknown state")
+				  << ")" << std::endl;
 
-		if (n == 0) {
-		    // Capture the write() packet, then set the seq & ack.  To avoid
-		    // the write() packet arriving to remote host, we need to set the
-		    // TTL to 1.
+		    if (n == 0) {
+			// Capture the write() packet, then set the seq & ack.  To avoid
+			// the write() packet arriving to remote host, we need to set the
+			// TTL to 1.
 
-		    ProbePcap capture(addressInfo.getDevice().c_str(), "tcp");
+			capture = ProbePcap::Instance(addressInfo.getDevice().c_str(), "tcp");
 
-		    if (atexit(Close) != 0)
-			throw ProbeException("atexit");
+			optlen = sizeof(origttl);
+			if (getsockopt(connfd, IPPROTO_IP, IP_TTL, &origttl, &optlen) < 0)
+			    throw ProbeException("getsockopt IP_TTL");
 
-                    optlen = sizeof(origttl);
-                    if (getsockopt(connfd, IPPROTO_IP, IP_TTL, &origttl, &optlen) < 0)
-                        throw ProbeException("getsockopt IP_TTL");
+			ttl = 1;
+			if (setsockopt(connfd, IPPROTO_IP, IP_TTL, &ttl, sizeof(ttl)) < 0)
+			    throw ProbeException("setsockopt IP_TTL");
 
-                    ttl = 1;
-                    if (setsockopt(connfd, IPPROTO_IP, IP_TTL, &ttl, sizeof(ttl)) < 0)
-                        throw ProbeException("setsockopt IP_TTL");
-
-                    if (write(connfd, "\xa5", 1) != 1)
-                        throw ProbeException("write");
+			if (write(connfd, "\xa5", 1) != 1)
+			    throw ProbeException("write");
 		    
-                    // capture the write() packet immediately or when it retransmit
-                    for ( ; ; ) {
-                        ptr = capture.nextPcap(&caplen);
-                        assert(ptr);
-                        if (TcpProbeSock::capWrite(
-                                ptr,
-                                caplen,
-                                sport,
-                                dport,
-                                ipid,
-                                seq,
-                                ack,
-				ipopt,
-				iplen,
-				tcpopt,
-				tcplen
-                            ))
-                            break;
-                    }
+			// capture the write() packet immediately or when it retransmit
+			for ( ; ; ) {
+			    ptr = capture->nextPcap(&caplen);
+			    assert(ptr);
+			    if (TcpProbeSock::capWrite(
+				    ptr,
+				    caplen,
+				    sport,
+				    dport,
+				    ipid,
+				    seq,
+				    ack,
+				    ipopt,
+				    iplen,
+				    tcpopt,
+				    tcplen
+				))
+				break;
+			}
 
-                    if (verbose > 2) {
-                        std::cerr << "captured ipid: " << ipid
-                                  << " seq: " << seq
-                                  << " ack: " << ack << std::endl;
+			if (verbose > 2) {
+			    std::cerr << "captured ipid: " << ipid
+				      << " seq: " << seq
+				      << " ack: " << ack << std::endl;
 
-			fprintf(stderr, "captured ipopt (%d): ", iplen);
-			for (i = 0; i < iplen; i++)
-			    std::fprintf(stderr, "%02x ", ipopt[i]);
-			std::fprintf(stderr, "%s\n", iplen ? "" : "null");
+			    fprintf(stderr, "captured ipopt (%d): ", iplen);
+			    for (i = 0; i < iplen; i++)
+				std::fprintf(stderr, "%02x ", ipopt[i]);
+			    std::fprintf(stderr, "%s\n", iplen ? "" : "null");
 
-			fprintf(stderr, "captured tcpopt (%d): ", tcplen);
-			for (i = 0; i < tcplen; i++)
-			    std::fprintf(stderr, "%02x ", tcpopt[i]);
-			std::fprintf(stderr, "%s\n", tcplen ? "" : "null");
+			    fprintf(stderr, "captured tcpopt (%d): ", tcplen);
+			    for (i = 0; i < tcplen; i++)
+				std::fprintf(stderr, "%02x ", tcpopt[i]);
+			    std::fprintf(stderr, "%s\n", tcplen ? "" : "null");
+			}
+
+			// set out-of-order sequence
+			++ipid, ++seq;
 		    }
+		    else if (n > 0) {
+			// connection refused or timed out
+			if (verbose)
+			    std::cerr << "can't connect to " << host
+				      << " (" << service <<")"
+				      << std::endl;
+			close(connfd);
+			connfd = -1;
+		    }
+		    else {
+			close(connfd);
+			throw ProbeException("nonbConn");
+		    }
+		}
 
-		    // set out-of-order sequence
-		    ++ipid, ++seq;
-		}
-		else if (n > 0) {
-		    // connection refused or timed out
-		    if (verbose)
-			std::cerr << "can't connect to " << host
-                                  << " (" << service <<")"
-                                  << std::endl;
-		    close(connfd);
-		    connfd = -1;
-		}
-		else {
-                    close(connfd);
-		    throw ProbeException("nonbConn");
+		// 
+		// Now we can build the TCP packet
+		// 
+		if (fragsize)         // don't set tcp mss options
+		    tcplen = 0;
+
+                ProbeSock *tcpProbe;
+		if (badlen)
+                    tcpProbe = new TcpProbeSock(
+                        mtu,
+                        src,
+                        dst,
+                        sport,
+                        dport,
+                        4,
+                        NULL,
+                        tcplen,
+                        tcpopt,
+                        ipid,
+                        seq,
+                        ack,
+                        tcpFlags
+                    );
+		else
+                    tcpProbe = new TcpProbeSock(
+                            mtu,
+                            src,
+                            dst,
+                            sport,
+                            dport,
+                            iplen,
+                            ipopt,
+                            tcplen,
+                            tcpopt,
+                            ipid,
+                            seq,
+                            ack,
+                            tcpFlags
+                    );
+
+                probeVec.push_back(tcpProbe);
+
+		break;                // case IPPROTO_TCP
+
+	    case IPPROTO_UDP:
+
+                UdpProbeSock *udpProbe;
+
+		if (badlen)
+                    udpProbe = new UdpProbeSock(
+                        // default packet size used in traceroute is 52 bytes
+                        protoVec.size() == 1 ? mtu : 52,
+                        src,
+                        dst,
+                        sport,
+                        // base port number used in traceroute
+                        haveTcp ? 33434 : dport,
+                        4
+                    );
+		else
+                    udpProbe = new UdpProbeSock(
+                        // default packet size used in traceroute is 52 bytes
+                        protoVec.size() == 1 ? mtu : 52,
+                        src,
+                        dst,
+                        sport,
+                        // classic base port number used in traceroute
+                        haveTcp ? 33434 : dport,
+                        iplen,
+                        ipopt
+		    );
+
+                probeVec.push_back(udpProbe);
+
+		break;		  // case IPPROTO_UDP
+
+	    case IPPROTO_ICMP:
+
+                IcmpProbeSock *icmpProbe;
+                
+		if (badlen)
+                    icmpProbe = new IcmpProbeSock(
+                        mtu,
+                        src,
+                        dst,
+                        icmpFlags,
+                        4
+                    );
+		else
+                    icmpProbe = new IcmpProbeSock(
+                        mtu,
+                        src,
+                        dst,
+                        icmpFlags,
+                        iplen,
+                        ipopt
+                    );
+
+                probeVec.push_back(icmpProbe);
+
+		break;		  // case IPPROTO_ICMP
+default:
+		std::cerr << "unknown protocol: " << protocol << std::endl;
+		exit(1);
+	    } // case PROTOCOL
+        }
+
+        if (verbose > 1) {
+            for (probe = probeVec.begin(); probe != probeVec.end(); ++probe) {
+                std::cout << ">>>> ProbeSock <<<<" << std::endl;
+                switch ((*probe)->getProtocol()) {
+                case IPPROTO_TCP:
+		    if (TcpProbeSock *tcpProbe = dynamic_cast<TcpProbeSock *>(*probe))
+			std::cout << *tcpProbe << std::endl;
+		    else
+			throw std::bad_cast();
+                    break;
+
+                case IPPROTO_UDP:
+		    if (UdpProbeSock *udpProbe = dynamic_cast<UdpProbeSock *>(*probe))
+			std::cout << *udpProbe << std::endl;
+		    else
+			throw std::bad_cast();
+                    break;
+
+                case IPPROTO_ICMP:
+                    if (IcmpProbeSock *icmpProbe = dynamic_cast<IcmpProbeSock *>(*probe))
+                        std::cout << *icmpProbe << std::endl;
+                    else 
+                        throw std::bad_cast();
+                    break;
                 }
-	    }
+            }
+        }
 
-	    // 
-	    // Now we can build the TCP packet
-	    // 
-            if (fragsize)         // don't set tcp mss options
-                tcplen = 0;
+        std::cout << "proberoute to " << host
+                  << " (" << inet_ntoa(dst) << ")";
+        std::cout << " from " << inet_ntoa(src)
+                  << " (" << addressInfo.getDevice() << ")"
+                  << " with ";
+        printProto();
+        std::cout << " protocol" << std::endl;
 
-	    if (badlen) {
-		probe = new TcpProbeSock(
-		    mtu,
-		    src,
-		    dst,
-		    sport,
-		    dport,
-		    4,
-		    NULL,
-		    tcplen,
-		    tcpopt,
-		    ipid,
-		    seq,
-		    ack
-		);
-	    }
-	    else {
-		probe = new TcpProbeSock(
-		    mtu,
-		    src,
-		    dst,
-		    sport,
-		    dport,
-		    iplen,
-		    ipopt,
-		    tcplen,
-		    tcpopt,
-		    ipid,
-		    seq,
-		    ack
-		);
-	    }
-
-	    if (verbose > 1) {
-		if (TcpProbeSock *tcpProbe = dynamic_cast<TcpProbeSock *>(probe))
-		    std::cout << *tcpProbe << std::endl;
-		else
-		    throw std::bad_cast();
-	    }
-
-	    break;                // case IPPROTO_TCP
-
-	case IPPROTO_UDP:
-	    if (badlen)
-		probe = new UdpProbeSock(
-		    mtu,
-		    src,
-		    dst,
-		    sport,
-		    dport,
-		    4
-		);
-	    else
-		probe = new UdpProbeSock(
-		    mtu,
-		    src,
-		    dst,
-		    sport,
-		    dport,
-		    iplen,
-		    ipopt
-		);
-
-	    if (verbose > 1) {
-		if (UdpProbeSock *udpProbe = dynamic_cast<UdpProbeSock *>(probe))
-		    std::cout << *udpProbe << std::endl;
-		else
-		    throw std::bad_cast();
-	    }
-
-	    break;		  // case IPPROTO_UDP
-
-	case IPPROTO_ICMP:
-	    if (badlen)
-		probe = new IcmpProbeSock(mtu, src, dst, flags, 4);
-	    else
-		probe = new IcmpProbeSock(mtu, src, dst, flags, iplen, ipopt);
-
-	    if (verbose > 1) {
-		if (IcmpProbeSock *icmpProbe = dynamic_cast<IcmpProbeSock *>(probe))
-		    std::cout << *icmpProbe << std::endl;
-		else 
-		    throw std::bad_cast();
-	    }
-
-	    break;		  // case IPPROTO_ICMP
-		
-	default:
-	    std::cerr << "unknown protocol: " << protocol << std::endl;
-	    exit(1);
-	} // case PROTOCOL
-
-	std::cout << "proberoute to " << host
-		  << " (" << inet_ntoa(probe->getDstAddr()) << ")";
-	std::cout << " from " << inet_ntoa(probe->getSrcAddr())
-		  << " (" << addressInfo.getDevice() << ")"
-		  << " with " << (
-		      probe->getProtocol() == IPPROTO_TCP  ? "TCP" :
-		      probe->getProtocol() == IPPROTO_UDP  ? "UDP" :
-		      probe->getProtocol() == IPPROTO_ICMP ? "ICMP" : "unknown"
-		  ) << " protocol" << std::endl;
-	std::cout << firstttl << " hops min, " << maxttl << " hops max" << std::endl;
-	std::cout << "outgoing MTU = " << probe->getPmtu() << std::endl;
+        std::cout << "destination: " << addressInfo.getDestination() << ", "
+                  << "gateway: " << addressInfo.getGateway();
+        if (addressInfo.getDestinationMask()[0] != 0)
+            std::cout << ", mask: " << addressInfo.getDestinationMask();
+        std::cout << std::endl;
 	
+        std::cout << firstttl << " hops min, " << maxttl << " hops max" << std::endl;
+        std::cout << "outgoing MTU = " << mtu << std::endl;
 
 	//
 	// Send the probe and obtain the router/host IP
 	// 
-        ProbePcap capture(addressInfo.getDevice().c_str(),
-                          "tcp or "
-			  "icmp[0:1] == 0  or "  // Echo Reply
-			  "icmp[0:1] == 3  or "  // Destination Unreachable
-			  "icmp[0:1] == 11 or "  // Time Exceed
-			  "icmp[0:1] == 12 or "	 // Parameter Problem
-			  "icmp[0:1] == 14"	 // Timestamp Reply
+	ProbePcap::resetInstance();
+        capture = ProbePcap::Instance(addressInfo.getDevice().c_str(),
+				      "tcp or "
+				      "icmp[0:1] == 0  or "  // Echo Reply
+				      "icmp[0:1] == 3  or "  // Destination Unreachable
+				      "icmp[0:1] == 11 or "  // Time Exceed
+				      "icmp[0:1] == 12 or "  // Parameter Problem
+				      "icmp[0:1] == 14"	     // Timestamp Reply
 	);
 
 	bzero(buf, sizeof(buf));
 
+        mtu = addressInfo.getDevMtu();
 	for (ttl = firstttl;
-	     ttl < maxttl;
+	     ttl <= maxttl;
 	     ++ttl,
-		   ({
-		       // the original traceroute(1) increments the destination UDP port 
-		       if (protocol == IPPROTO_UDP && !service)
-			   (dynamic_cast<UdpProbeSock *>(probe))->incrUdpPort();
-		       else if (protocol == IPPROTO_ICMP)
-			   (dynamic_cast<IcmpProbeSock *>(probe))->incrIcmpSeq();
-		       // 0;	  // just pad expression
-		   })
+                   ({
+                       for (probe = probeVec.begin(); probe != probeVec.end(); ++probe)
+                           ++(**probe);
+                   })
 	) {
+            int savecode = 0;
+            
             std::printf("%3d ", ttl);
 	    for (i = 0; i < nquery; i++) {
 		if (gettimeofday(&tv, NULL) < 0)
 		    throw ProbeException("gettimeofday");
 
-		if ((protocol == IPPROTO_TCP && flags == TH_SYN) ||
-		    (protocol == IPPROTO_ICMP &&
-		     (flags == ICMP_TSTAMP || flags == ICMP_TSTAMPREPLY)))
-		    packlen = probe->getProtocolHdrLen();
-		else
-		    packlen = probe->getPmtu() - probe->getIphdrLen();
+                // Since some probe's mtu may be updated, should synchronize to
+                // all probes except the UDP default packet size (52-byte).
 
-                if (packlen < probe->getProtocolHdrLen())
-                    throw ProbeException("packet length too short", MSG);
+                for (probe = probeVec.begin(); probe != probeVec.end(); ++probe) {
+                    if ((*probe)->getProtocol() == IPPROTO_UDP && protoVec.size() != 1)
+                        continue;
+                    if (mtu > (*probe)->getPmtu())
+                        mtu = (*probe)->getPmtu();
+                }
+                
+                for (probe = probeVec.begin(); probe != probeVec.end(); ++probe) {
+                    if ((*probe)->getProtocol() == IPPROTO_UDP && protoVec.size() != 1)
+                        continue;
+                    if (mtu < (*probe)->getPmtu())
+                        (*probe)->setPmtu(mtu);
+                }
 
-                if (fragsize)
-                    probe->buildProtocolHeader(
-                        buf,
-                        packlen,
-                        flags,
-                        badsum
-                    );
+                for (probe = probeVec.begin(); probe != probeVec.end(); ++probe) {
+                    int protocol = (*probe)->getProtocol();
 
-		if (fragsize)
-		    probe->sendFragPacket(
-			buf,
-			packlen,
-			ttl,
-			fragsize,
-			addressInfo.getForeignSockaddr(),
-			addressInfo.getForeignSockaddrLen()
-		    );
+                    if ((protocol == IPPROTO_TCP && tcpFlags == TH_SYN) ||
+                        (protocol == IPPROTO_ICMP &&
+                         (icmpFlags == ICMP_TSTAMP || icmpFlags == ICMP_TSTAMPREPLY)))
+                        packlen = (*probe)->getProtocolHdrLen();
+                    else
+                        packlen = (*probe)->getPmtu() - (*probe)->getIphdrLen();
+                        // packlen = mtu - (*probe)->getIphdrLen();
 
-		else {
-		    len = probe->buildProtocolPacket(
-                        buf,
-                        packlen,
-                        ttl,
-                        IP_DF,
-                        flags,
-                        badsum
-                    );
+                    if (packlen < (*probe)->getProtocolHdrLen())
+                        throw ProbeException("packet length too short", MSG);
 
-		    probe->sendPacket(
-                        buf,
-                        len,
-                        0,
-                        addressInfo.getForeignSockaddr(),
-                        addressInfo.getForeignSockaddrLen()
-                    );
-		}
+                    if (fragsize) {
+                        (*probe)->buildProtocolHeader(
+                            buf,
+                            packlen,
+                            badsum
+                        );
+
+                        (*probe)->sendFragPacket(
+                            buf,
+                            packlen,
+                            ttl,
+                            fragsize,
+                            addressInfo.getForeignSockaddr(),
+                            addressInfo.getForeignSockaddrLen()
+                        );
+                    }
+                    else {
+                        len = (*probe)->buildProtocolPacket(
+                            buf,
+                            packlen,
+                            ttl,
+                            IP_DF,
+                            badsum
+                        );
+
+                        (*probe)->sendPacket(
+                            buf,
+                            len,
+                            0,
+                            addressInfo.getForeignSockaddr(),
+                            addressInfo.getForeignSockaddrLen()
+                        );
+                    }
+                }
+                
                 
 		alarm(waittime);
 
@@ -475,20 +572,34 @@ int main(int argc, char *argv[])
 
 		code = tcpcode = 0;
 
+                msg = "";
 		for ( ; ; ) {
-		    ptr = capture.nextPcap(&caplen);
+		    ptr = capture->nextPcap(&caplen);
 		    assert(ptr != NULL);
-		    if (code = probe->recvIcmp(ptr, caplen))
-			break;
-		    if (protocol == IPPROTO_TCP) {
-			if (TcpProbeSock *tcpProbe = dynamic_cast<TcpProbeSock *>(probe)) {
-			    if (tcpcode = tcpProbe->recvTcp(ptr, caplen))
-				break;
-			} else {
-			    throw std::bad_cast();
-			}
-		    }
+                    for (probe = probeVec.begin(); probe != probeVec.end(); ++probe) {
+                        
+                        if (code = (*probe)->recvIcmp(ptr, caplen)) {
+                            msg = (*probe)->getProtocol() == IPPROTO_TCP ? "TCP" :
+                                  (*probe)->getProtocol() == IPPROTO_UDP ? "UDP" :
+                                  (*probe)->getProtocol() == IPPROTO_ICMP ? "ICMP" : "unknown";
+                            goto endWait;
+                        }
+                            
+                        
+                        if ((*probe)->getProtocol() == IPPROTO_TCP) {
+                            if (TcpProbeSock *tcpProbe = dynamic_cast<TcpProbeSock *>(*probe)) {
+                                if (tcpcode = tcpProbe->recvTcp(ptr, caplen)) {
+                                    savecode = tcpcode;
+                                    msg = "TCP";
+                                    goto endWait;
+                                }
+                            } else {
+                                throw std::bad_cast();
+                            }
+                        }
+                    }
 		}
+              endWait:
 		alarm(0);
 
 		if ((rtt = delta(&tv)) < 0)
@@ -524,7 +635,7 @@ int main(int argc, char *argv[])
 			    break;
 
 			case 4:	  // ICMP_UNREACH_NEEDFRAG
-			    ss << "Need fragment (next MTU = " << probe->getPmtu() << ")";
+			    ss << "Need fragment (next MTU = " << (*probe)->getPmtu() << ")";
 			    s = verbose ? ss.str() : "!F";
                             unreachable = false;
 			    break;
@@ -583,19 +694,31 @@ int main(int argc, char *argv[])
 			
                 
 		if (ip->ip_src.s_addr == dst.s_addr) {
-		    found = true;
-		    if (code == -1) // seems impossible but really happen
+		    if (code == -1) { // seems impossible but really happen
 			s = verbose ? "Time to live exceed" : "!TTL";
+                        found = false;
+                    }
+                    else
+                        found = true;
 		}
 
-		std::printf("%s%s  %.3f ms", s.empty() ? "" : "  ", s.c_str(), rtt);
+                if (!s.empty()) s.insert(0, "  ");
+                if (!msg.empty()) msg += " ";
+		std::printf("%s  %s%.3f ms", s.c_str(),
+                            (verbose > 2) ? msg.c_str() : "",
+                            rtt);
 
 	    }
 	    std::cout << std::endl;
 
 	    if (found || unreachable) {
-		if (protocol == IPPROTO_TCP && tcpcode) {
-		    TcpProbeSock *tcpProbe = dynamic_cast<TcpProbeSock *>(probe);
+                for (probe = probeVec.begin();
+                     probe != probeVec.end() && (*probe)->getProtocol() != IPPROTO_TCP;
+                     ++probe)
+                    ;
+                
+		if (probe != probeVec.end() && savecode) {
+		    TcpProbeSock *tcpProbe = dynamic_cast<TcpProbeSock *>(*probe);
 		    if (!tcpProbe)
 			throw std::bad_cast();
 		    assert(dport == tcpProbe->getTcpDstPort());
@@ -607,9 +730,9 @@ int main(int argc, char *argv[])
 		    else if (conn)
 			std::cout << "Port " << dport << " closed" << std::endl;
 		    else {
-			switch (tcpcode) {
+			switch (savecode) {
 			case 1:
-			    if (flags == TH_SYN)
+			    if (tcpFlags == TH_SYN)
 				std::cout << "Port " << dport << " closed" << std::endl;
 			    else
 				std::cout << "Port " << dport << " closed/filtered" << std::endl;
@@ -630,7 +753,8 @@ int main(int argc, char *argv[])
 	    }
 	}
 
-	delete probe;
+        for (probe = probeVec.begin(); probe != probeVec.end(); ++probe)
+            delete *probe;
 	
     } catch (ProbeException &e) {
 	std::cerr << e.what() << std::endl;

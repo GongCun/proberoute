@@ -2,6 +2,7 @@
 #include <assert.h>
 #include <errno.h>
 
+
 int ProbeSock::openSock(const int protocol) throw(ProbeException)
 {
     int rawfd;
@@ -135,7 +136,6 @@ int ProbeSock::sendFragPacket(const u_char *tcpbuf, const int packlen,
 int TcpProbeSock::buildProtocolHeader(
     u_char *buf,
     int protoLen,
-    u_char flags,
     bool badsum
 ) {
     struct tcphdr *tcp;
@@ -152,8 +152,8 @@ int TcpProbeSock::buildProtocolHeader(
     tcp->th_ack = htonl(tcpack);
     tcp->th_x2 = 0;
     tcp->th_off = tcphdrLen >> 2;
-    tcp->th_flags = flags;
-    tcp->th_urp = (flags & TH_URG && protoLen - tcphdrLen) ?
+    tcp->th_flags = tcpflags;
+    tcp->th_urp = (tcpflags & TH_URG && protoLen - tcphdrLen) ?
                   htons(1) : 0;   // urgent pointer
     tcp->th_win = htons(MAX_MTU); // default 65535
     tcp->th_sum = 0;              // calculate later
@@ -165,8 +165,7 @@ int TcpProbeSock::buildProtocolHeader(
     }
     
     if (badsum) {
-        srand(time(0));
-        tcp->th_sum = rand() & 0xffff;
+        tcp->th_sum = (u_short)Rand() & 0xffff;
     } else {
 	sum = in_checksum((uint16_t *)&srcAddr, 4);
 	sum += in_checksum((uint16_t *)&dstAddr, 4);
@@ -186,7 +185,6 @@ int ProbeSock::buildProtocolPacket(
     int protoLen,
     u_char ttl,
     u_short flagFrag,
-    u_char flags,
     bool badsum
 ) {
     int iplen, hdrlen;
@@ -194,7 +192,7 @@ int ProbeSock::buildProtocolPacket(
     iplen = buildIpHeader(buf, protoLen, ttl, flagFrag);
     assert(iplen == iphdrLen);
 	
-    hdrlen = buildProtocolHeader(buf + iplen, protoLen, flags, badsum);
+    hdrlen = buildProtocolHeader(buf + iplen, protoLen, badsum);
     assert(hdrlen == getProtocolHdrLen());
 
     return iphdrLen + protoLen;	  // total packet length
@@ -223,7 +221,7 @@ static int mtus[] = {
     0
 };
 
-int ProbeSock::recvIcmp(const u_char *buf, int len)
+int ProbeSock::recvIcmp(const u_char *buf, const int len)
 {
     //
     // Return:
@@ -260,6 +258,9 @@ int ProbeSock::recvIcmp(const u_char *buf, int len)
         origip = (struct ip *)(buf + iplen + PROBE_ICMP_LEN);
         origiplen = origip->ip_hl << 2;
 
+        if (origip->ip_p != protocol)
+            return 0;
+        
         // ICMP header + Original IP header + First 8 bytes of data field
         if (icmplen < PROBE_ICMP_LEN + origiplen + 8)
             return 0;
@@ -464,7 +465,6 @@ done:
 int UdpProbeSock::buildProtocolHeader(
     u_char *buf,
     int protoLen,
-    u_char flags,
     bool badsum
 ) {
     struct udphdr *udp;
@@ -480,8 +480,7 @@ int UdpProbeSock::buildProtocolHeader(
     udp->uh_sum = 0;              // calculate later
 
     if (badsum) {
-        srand(time(0));
-        udp->uh_sum = rand() & 0xffff;
+        udp->uh_sum = (u_short)Rand() & 0xffff;
     } else {
 	sum = in_checksum((uint16_t *)&srcAddr, 4);
 	sum += in_checksum((uint16_t *)&dstAddr, 4);
@@ -496,7 +495,6 @@ int UdpProbeSock::buildProtocolHeader(
 int IcmpProbeSock::buildProtocolHeader(
     u_char *buf,
     int protoLen,
-    u_char flags,
     bool badsum
 ) {
     struct icmp *icmp;
@@ -508,14 +506,14 @@ int IcmpProbeSock::buildProtocolHeader(
     bzero(buf, icmphdrLen);
     icmp = (struct icmp *)buf;
 
-    icmp->icmp_type = flags;
+    icmp->icmp_type = icmpType;
     icmp->icmp_code = 0;
     icmp->icmp_cksum = 0;	  // calculate later
     icmp->icmp_id = htons(icmpId);
     icmp->icmp_seq = htons(icmpSeq);
 
-    if (flags == ICMP_TSTAMP ||
-	flags == ICMP_TSTAMPREPLY
+    if (icmpType == ICMP_TSTAMP ||
+	icmpType == ICMP_TSTAMPREPLY
     ) {
 	if (gettimeofday(&tvorig, (struct timezone *)NULL) < 0) {
 	    perror("gettimeofday");
@@ -524,15 +522,14 @@ int IcmpProbeSock::buildProtocolHeader(
 	tsorig = tvorig.tv_sec % (24 * 60 * 60) * 1000 + tvorig.tv_usec / 1000;
 	icmp->icmp_otime = htonl(tsorig);
 
-	if (flags == ICMP_TSTAMP)
+	if (icmpType == ICMP_TSTAMP)
 	    icmp->icmp_rtime = icmp->icmp_ttime = 0;
 	else
 	    icmp->icmp_rtime = icmp->icmp_ttime = icmp->icmp_otime;
     }
 
     if (badsum) {
-        srand(time(0));
-        icmp->icmp_cksum = rand() & 0xffff;
+        icmp->icmp_cksum = (u_short)Rand() & 0xffff;
     } else {
 	sum = in_checksum((uint16_t *)icmp, protoLen);
         icmp->icmp_cksum = CKSUM_CARRY(sum);
@@ -541,7 +538,7 @@ int IcmpProbeSock::buildProtocolHeader(
     return icmphdrLen;
 }
 
-int IcmpProbeSock::recvIcmp(const u_char *buf, int len)
+int IcmpProbeSock::recvIcmp(const u_char *buf, const int len)
 {
     //
     // Return:
@@ -573,12 +570,23 @@ int IcmpProbeSock::recvIcmp(const u_char *buf, int len)
     type = icmp->icmp_type;
     code = icmp->icmp_code;
 
-    if ((type == ICMP_TIMXCEED && code == ICMP_TIMXCEED_INTRANS) ||
-        type == ICMP_UNREACH ||
-	type == ICMP_PARAMPROB) {
-
+    if (type == ICMP_ECHOREPLY ||
+        type == ICMP_TSTAMPREPLY) {
+	if (icmp->icmp_id == htons(icmpId) &&
+	    icmp->icmp_seq == htons(icmpSeq) &&
+            ip->ip_id != htons(ipid)) // ensure the message is not sent by
+				      // ourselves
+	    return -3;
+    }
+    else if ((type == ICMP_TIMXCEED && code == ICMP_TIMXCEED_INTRANS) ||
+             type == ICMP_UNREACH ||
+             type == ICMP_PARAMPROB) {
+        
         origip = (struct ip *)(buf + iplen + PROBE_ICMP_LEN);
         origiplen = origip->ip_hl << 2;
+
+        if (origip->ip_p != IPPROTO_ICMP)
+            return 0;
 
         // ICMP header + Original IP header + First 8 bytes of data field
         if (icmplen < PROBE_ICMP_LEN + origiplen + 8)
@@ -610,19 +618,10 @@ int IcmpProbeSock::recvIcmp(const u_char *buf, int len)
 
         return ((type == ICMP_TIMXCEED) ? -1 : code + 1);
     }
-    else if (type == ICMP_ECHOREPLY ||
-	     type == ICMP_TSTAMPREPLY) {
-	if (icmp->icmp_id == htons(icmpId) &&
-	    icmp->icmp_seq == htons(icmpSeq) &&
-            ip->ip_id != htons(ipid)) // ensure the message is not sent by
-				      // ourselves
-	    return -3;
-    }
-
     return 0;
 }
  
-int UdpProbeSock::recvIcmp(const u_char *buf, int len)
+int UdpProbeSock::recvIcmp(const u_char *buf, const int len)
 {
     //
     // Return:

@@ -25,9 +25,19 @@
 # endif
 #endif
 
-/* Get interface MTU */
+/* Get interface MTU and routing information */
 #include <sys/ioctl.h>
 #include <net/if.h>		/* struct ifreq */
+#ifdef HAVE_SOCKADDR_DL_STRUCT
+#include <net/if_dl.h>		/* struct sockaddr_dl */
+#endif
+#include <net/route.h>		/* struct rt_msghdr */
+
+#ifdef _LINUX
+#include <asm/types.h>
+#include <linux/netlink.h>
+#include <linux/rtnetlink.h>
+#endif
 
 #include <netinet/ip.h>
 #include <netinet/ip_icmp.h>
@@ -57,7 +67,7 @@
 #include <cstring>		// memset(), strcmp(), ...
 #include <stdexcept>
 #include <algorithm>
-// #include <list>
+#include <vector>
 
 #define CAP_LEN 1514             // Maximum capture length
 #define CAP_TIMEOUT 500          // Milliseconds; This timeout is used to arrange
@@ -81,9 +91,10 @@
 #define PROBE_ICMP_LEN 8	 // ICMP header length 
 #define MAX_GATEWAY 9		 // Maximum source route records
 
+
 extern sigjmp_buf jumpbuf;
 extern int verbose;
-extern int protocol;
+// extern int protocol;
 extern int srcport;
 extern const char *device;
 extern int nquery;
@@ -94,10 +105,24 @@ extern int mtu;
 extern int conn;
 extern int badsum, badlen;
 extern const char *host, *service, *srcip;
-extern u_char flags;
+extern u_char tcpFlags;
+extern u_char icmpFlags;
 extern u_char tcpopt[TCP_OPT_LEN], ipopt[IP_OPT_LEN];
 extern u_char *optptr;
+extern std::vector<int> protoVec;
 
+inline int Rand()
+{
+    // only need call srand() once
+    static bool init = false;
+    
+    if (!init) {
+        srand(time(0));
+        init = true;
+    }
+    return rand();
+}
+ 
 inline void safeFree(void *point)
 {
     if (point) free(point);
@@ -176,11 +201,14 @@ class ProbeAddressInfo {
 
 private:
     // Raw address portion of this object
-    sockaddr localAddr, foreignAddr;
+    struct sockaddr localAddr, foreignAddr;
     socklen_t localAddrLen, foreignAddrLen;
     std::string device;
     u_short devMtu;
     bool sameLan;
+    char strDestination[INET_ADDRSTRLEN];
+    char strGateway[INET_ADDRSTRLEN];
+    char strDestinationMask[INET_ADDRSTRLEN];
 
     // the device information element
     struct deviceInfo {
@@ -237,11 +265,25 @@ public:
     bool isSameLan() const {
         return sameLan;
     }
+
+    const char *getGateway() const {
+        return strGateway;
+    }
+            
+    const char *getDestination() const {
+        return strDestination;
+    }
+
+    const char *getDestinationMask() const {
+        return strDestinationMask;
+    }
+            
             
     struct deviceInfo *deviceInfoList; // the entry of device linked list
     void getDeviceInfo() throw(ProbeException);
     void freeDeviceInfo();
     void printDeviceInfo();
+    void getRouteInfo(const struct in_addr *) throw(ProbeException);
  
 };
 
@@ -260,6 +302,16 @@ inline std::ostream& operator<<(std::ostream &output,
            << std::endl;
     output << "device: " << address.device << std::endl;
     output << "mtu: " << address.devMtu << std::endl;
+
+    if (address.strDestination[0] != 0)
+        output << "destination: " << address.strDestination << std::endl;
+
+    if (address.strGateway[0] != 0)
+        output << "gateway: " << address.strGateway << std::endl;
+
+    if (address.strDestinationMask[0] != 0)
+        output << "netmask: " << address.strDestinationMask << std::endl;
+
     output << (address.sameLan ? "in the same lan" : "not in the same lan");
 
     return output;
@@ -273,17 +325,35 @@ private:
     const std::string DEV;
     const std::string CMD;
     struct bpf_program bpfCode;
+    static ProbePcap* _instance;
+
+protected:
+    ProbePcap(const char *,
+	      const char *) throw(ProbeException);
+    
 public:
+    // Singleton
+    static ProbePcap* Instance(const char *,
+			       const char *) throw(ProbeException);
+
+    static void resetInstance() {
+	if (_instance) {
+	    delete _instance;
+	    _instance = NULL;
+	}
+    }
+    
     ~ProbePcap() {
 #ifdef HAVE_PCAP_CLOSE
         pcap_close(handle);
 #elif defined HAVE_PCAP_FREECODE
         pcap_freecode(&bpfCode);
 #endif
+	// delete _instance;
+	// _instance = NULL;
 	// std::cerr << "EXIT PCAP" << std::endl;
     }
-    ProbePcap(const char *,
-	      const char *) throw(ProbeException);
+
     const u_char *nextPcap(int *len);
 }; // class ProbePcap
 
@@ -291,8 +361,17 @@ class ProbeSock {
     friend std::ostream& operator<<(std::ostream&,
 				    const ProbeSock&);
 public:
+    virtual ProbeSock& operator++() {
+        ++ipid;
+        return *this;
+    }
+
     static int openSock(const int protocol) throw(ProbeException);
-    virtual ~ProbeSock() { close(rawfd); }
+    // If we copy anonymous class to vector, we can't close the FD
+    virtual ~ProbeSock() {
+        close(rawfd);
+        // std::cerr << "I'm freed" << std::endl;
+    }
     ProbeSock(
 	const int proto,
 	u_short mtu,
@@ -300,7 +379,7 @@ public:
 	struct in_addr dst,
 	int len = 0,
 	u_char *buf = NULL,
-	uint16_t id = (u_short)time(0) & 0xffff
+	uint16_t id = (u_short)Rand() & 0xffff
     ):
 	protocol(proto),
 	rawfd(openSock(proto)),
@@ -338,7 +417,6 @@ public:
     virtual int buildProtocolHeader(
 	u_char *buf,
 	int protoLen,
-	u_char flags = 0,
 	bool badsum = false
     ) = 0;
 
@@ -347,11 +425,10 @@ public:
 	int protoLen,
 	u_char ttl,
 	u_short flagFrag = IP_DF,
-	u_char flags = 0,
 	bool badsum = false
     );
 
-    virtual int recvIcmp(const u_char *buf, int len);
+    virtual int recvIcmp(const u_char *buf, const int len);
 
     int getIphdrLen() const {
 	return iphdrLen;
@@ -362,6 +439,14 @@ public:
     int getPmtu() const {
         return pmtu;
     }
+
+    void setPmtu(u_short mtu) {
+        pmtu = mtu;
+    }
+    void setPmtu(int mtu) {
+        pmtu = (u_short)mtu;
+    }
+                
 
     in_addr getSrcAddr() const {
 	return srcAddr;
@@ -375,6 +460,10 @@ public:
 	return protocol;
     }
 
+    int getRawfd() const {
+        return rawfd;
+    }
+            
 protected:
     const int protocol;
     int rawfd;
@@ -400,7 +489,7 @@ class IcmpProbeSock: public ProbeSock {
                                     const IcmpProbeSock& probe);
 
 private:
-    u_char icmpType;
+    u_char icmpType;		  // ICMP_ECHO, ICMP_TSTAMP, ...
     int icmphdrLen;
     u_short icmpId;
     u_short icmpSeq;
@@ -427,7 +516,6 @@ public:
     int buildProtocolHeader(
 	u_char *buf,
 	int protoLen,
-	u_char flags,
 	bool badsum
     );
 
@@ -439,11 +527,13 @@ public:
 	return icmpSeq;
     }
 
-    inline void incrIcmpSeq() {
-	++icmpSeq;
+    virtual IcmpProbeSock& operator++() {
+        ++ipid;
+        ++icmpSeq;
+        return *this;
     }
 
-    virtual int recvIcmp(const u_char *buf, int len);
+    virtual int recvIcmp(const u_char *buf, const int len);
 }; // class IcmpProbeSock
 
 class UdpProbeSock: public ProbeSock {
@@ -479,15 +569,17 @@ public:
     int buildProtocolHeader(
 	u_char *buf,
 	int protoLen,
-	u_char flags,
 	bool badsum
     );
 
-    inline void incrUdpPort() {
-	++dport;
+    virtual UdpProbeSock& operator++() {
+        // classic traceroute only increment the destination port
+        // ++ipid;
+        ++dport;
+        return *this;
     }
 
-    virtual int recvIcmp(const u_char *buf, int len);
+    virtual int recvIcmp(const u_char *buf, const int len);
 }; // class UdpProbeSock
 
 class TcpProbeSock: public ProbeSock {
@@ -506,7 +598,8 @@ public:
 	u_char *buf = NULL,
 	uint16_t id = (u_short)time(0) & 0xffff,
 	uint32_t seq = 0,
-	uint32_t ack = 0
+	uint32_t ack = 0,
+	u_char flags = TH_SYN
     ):
 	ProbeSock(IPPROTO_TCP, mtu, src, dst, iplen, ipbuf, id),
 	tcpoptLen(len),
@@ -514,7 +607,8 @@ public:
 	sport(_sport),
 	dport(_dport),
 	tcpseq(seq),
-	tcpack(ack)
+	tcpack(ack),
+	tcpflags(flags)
 	{
         assert(len >= 0);
         if (len) {
@@ -542,7 +636,6 @@ public:
     int buildProtocolHeader(
 	u_char *buf,
 	int protoLen,
-	u_char flags,
 	bool badsum
     );
 
@@ -579,6 +672,7 @@ private:
     int tcphdrLen;
     u_short sport, dport;
     uint32_t tcpseq, tcpack;
+    u_char tcpflags;
 }; // class TcpProbeSock
 
 inline std::ostream& operator<<(std::ostream& output,

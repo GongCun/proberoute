@@ -69,7 +69,7 @@ void ProbeAddressInfo::getDeviceInfo() throw(ProbeException)
 	}
 #endif	// HAVE_SOCKADDR_SA_LEN
 	ptr += sizeof(ifr->ifr_name) + len;  // for next one in buffer
-#endif  // _LINUX 
+#endif  // _LINUX
 
 	if (ifr->ifr_addr.sa_family != AF_INET)
 	    continue;
@@ -86,7 +86,7 @@ void ProbeAddressInfo::getDeviceInfo() throw(ProbeException)
         deviceInfoPtr = new deviceInfo;
         *deviceInfoNext = deviceInfoPtr;       // prev points to this new one
         deviceInfoNext = &deviceInfoPtr->next; // points to next one goes here
-        
+
 	deviceInfoPtr->flags = flags;          // IFF_xxx values
 
 #if defined(SIOCGIFMTU) && defined(HAVE_STRUCT_IFREQ_IFR_MTU)
@@ -96,7 +96,7 @@ void ProbeAddressInfo::getDeviceInfo() throw(ProbeException)
 #endif
 
         deviceInfoPtr->name = ifr->ifr_name;
-	
+
 	assert(ifr->ifr_addr.sa_family == AF_INET);
 
 	sinptr = (struct sockaddr_in *)&ifr->ifr_addr;
@@ -151,7 +151,7 @@ void ProbeAddressInfo::deviceInfo::print()
     std::cout << "mtu " << mtu << std::endl;
 }
 
-    
+
 void ProbeAddressInfo::printDeviceInfo()
 {
     struct deviceInfo *deviceInfoPtr;
@@ -196,15 +196,28 @@ ProbeAddressInfo::ProbeAddressInfo(const char *foreignHost, const char *foreignS
     if (foreignService == NULL)
 	foreignService = "33434"; // default is 32768 + 666 = 33434
 
+    bzero(&localAddr, sizeof(struct sockaddr));
+    bzero(&foreignAddr, sizeof(struct sockaddr));
+
     if ((n = getaddrinfo(foreignHost, foreignService, &hints, &res)) != 0)
         throw ProbeException("getaddrinfo error", gai_strerror(n));
 
-    bzero(&localAddr, sizeof(struct sockaddr));
+
 
     sockfd = -1;
 
     for (curr = res; curr && sockfd < 0; curr = curr->ai_next)
 	if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) >= 0) {
+            // Get destination, gateway and netmask. To get the destination
+            // network and netmask, must writing and reading the routing socket
+            // before call connect().
+            bzero(strDestination, sizeof(strDestination));
+            bzero(strGateway, sizeof(strGateway));
+            bzero(strDestinationMask, sizeof(strDestinationMask));
+            paddr = (struct sockaddr_in *)curr->ai_addr;
+            getRouteInfo(&paddr->sin_addr);
+
+            // Get the outgoing interface.
 	    if (connect(sockfd, curr->ai_addr, curr->ai_addrlen) < 0) {
 		close(sockfd);
 		sockfd = -1;
@@ -240,7 +253,7 @@ ProbeAddressInfo::ProbeAddressInfo(const char *foreignHost, const char *foreignS
 
     // fetch the device name or mtu size by the IP address
     getDeviceInfo();
-    
+
     struct deviceInfo *p;
     for (p = deviceInfoList; p; p = p->next) {
 	if (((struct sockaddr_in *)p->addr)->sin_addr.s_addr ==
@@ -270,7 +283,7 @@ ProbeAddressInfo::ProbeAddressInfo(const char *foreignHost, const char *foreignS
     // same LAN
     const uint32_t vlan = *((uint32_t *)&((struct sockaddr_in *)p->addr)->sin_addr) &
                           *((uint32_t *)&((struct sockaddr_in *)p->netmask)->sin_addr);
-    
+
     char strdst[INET_ADDRSTRLEN], strbrd[INET_ADDRSTRLEN], strvlan[INET_ADDRSTRLEN];
 
     inet_ntop(AF_INET, (struct in_addr *)&vlan, strvlan, sizeof(strvlan));
@@ -280,7 +293,7 @@ ProbeAddressInfo::ProbeAddressInfo(const char *foreignHost, const char *foreignS
 
     inet_ntop(AF_INET, &((struct sockaddr_in *)&foreignAddr)->sin_addr,
               strdst, sizeof(strdst));
-    
+
     if (verbose > 2)
         std::cerr << "strlan: " << strvlan << " "
                   << "strbrd: " << strbrd << " "
@@ -289,7 +302,444 @@ ProbeAddressInfo::ProbeAddressInfo(const char *foreignHost, const char *foreignS
     if (!(strcmp(strdst, strvlan) >= 0 &&
           strcmp(strdst, strbrd) <= 0))
         sameLan = false;
-    
+
+    // Check the gateway again strictly
+    if (!strcmp(strGateway, "AF_LINK"))
+        sameLan = true;
+
     freeDeviceInfo();
 }
 
+/*
+ * From UNP Chapter 18 "Routing Sockets", Section 18.3 "Reading and Writing"
+ *
+
+   buffer sent to kernel        buffer returned from kernel
+   +--------------+             +--------------+
+   | rt_msghdr{}  |             | rt_msghdr{}  |
+   |  RTM_GET     |             |  RTM_GET     |
+   +--------------+             +--------------+
+   | destination  | RTA_DST     | destination  | RAT_DST
+   | sockaddr{}   |             | sockaddr{}   |
+   +--------------+             +--------------+
+                                | gateway      | RTA_GATEWAY
+                                | sockaddr{}   |
+                                +--------------+
+                                | netmask      | RTA_NETMASK
+                                | sockaddr{}   |
+                                +--------------+
+                                | genmask      | RTA_GENMASK
+                                | sockaddr{}   |
+                                +--------------+
+
+    The socket address structures are variable-length. There are two
+    complications that must be handled. First, the two masks, the network mask
+    and the cloning mask, can be returned in a socket address structures with an
+    sa_len of 0 (assumes that has an sa_len field), but this really occupies the
+    size of an unsigned long. This value represents a mask of all zero bits
+    (0.0.0.0). Second, each socket address structure can be padded at the end so
+    that the next one begins on a specific boundary, which is the size of an
+    unsigned long (e.g., a 4-byte boundary for a 32-bit architecture). Although
+    sockaddr_in structures occupy 16 bytes, which requires no padding, the masks
+    often have padding at the end.
+ */
+
+static struct sockaddr *NEXT_SA(const struct sockaddr *sa);
+extern "C" {
+    static const char *sock_ntop(const struct sockaddr *sa, char *buf, const ssize_t size);
+    static const char *mask_ntop(const struct sockaddr *sa, char *buf, const ssize_t size);
+}
+
+#if !defined _LINUX && defined HAVE_RT_MSGHDR_STRUCT
+void ProbeAddressInfo::getRouteInfo(const struct in_addr *addr) throw(ProbeException)
+{
+    int sockfd;
+    struct rt_msghdr *rtm;
+    struct sockaddr *sa, *rti_info[RTAX_MAX];
+    struct sockaddr_in *sin;
+    char *buf;
+    pid_t pid;
+    ssize_t n;
+    // struct rt_msghdr{} + 8 * struct sockaddr{} < struct rt_msghdr{} + 512
+    const int BUFLEN = sizeof(struct rt_msghdr) + 512;
+    const int SEQ = 9999;
+
+    if ((sockfd = socket(AF_ROUTE, SOCK_RAW, 0)) < 0) {
+        throw ProbeException("socket AF_ROUTE error");
+    }
+
+    if ((buf = (char *)calloc(BUFLEN, 1)) == NULL) {
+        throw ProbeException("calloc");
+    }
+
+    rtm = (struct rt_msghdr *)buf;
+    rtm->rtm_msglen = sizeof(struct rt_msghdr) + sizeof(struct sockaddr_in);
+    rtm->rtm_version = RTM_VERSION;
+    rtm->rtm_type = RTM_GET;
+    rtm->rtm_addrs = RTA_DST;
+    rtm->rtm_pid = pid = getpid();
+    rtm->rtm_seq = SEQ;
+
+    // std::cerr << "BUFLEN = " << BUFLEN << std::endl;
+    // std::cerr << "size of rt_msghdr = " << sizeof(struct rt_msghdr) << std::endl;
+    // std::cerr << "rtm_msglen = " << rtm->rtm_msglen << std::endl;
+
+    sin = (struct sockaddr_in *)(rtm + 1);
+    sin->sin_len = sizeof(struct sockaddr_in);
+    sin->sin_family = AF_INET;
+    memcpy(&sin->sin_addr, addr, sizeof(struct in_addr));
+    
+    if (write(sockfd, rtm, rtm->rtm_msglen) != rtm->rtm_msglen) {
+        throw ProbeException("write rtm");
+    }
+    
+    do {
+        if ((n = read(sockfd, rtm, BUFLEN)) < 0)
+            throw ProbeException("read rtm");
+    } while (rtm->rtm_type != RTM_GET ||
+             rtm->rtm_seq != SEQ ||
+             rtm->rtm_pid != pid);
+
+    close(sockfd);
+    // std::cerr << "n = " << n << std::endl;
+
+    rtm = (struct rt_msghdr *)buf;
+    sa = (struct sockaddr *)(rtm + 1);
+
+    if (verbose > 2) {
+        std::cerr << "routing socket bitmask: ";
+        for (int i = 7; i >= 0; i--)
+            std::cerr << ((rtm->rtm_addrs >> i) & 1);
+        std::cerr << std::endl;
+    }
+    
+    for (int i = 0; i < RTAX_MAX; ++i) {
+        if (rtm->rtm_addrs & (1 << i)) { // bitmask identifying sockaddrs in msg
+            rti_info[i] = sa;
+            sa = NEXT_SA(sa);
+        }
+        else
+            rti_info[i] = NULL;
+    }
+
+    if (sa = rti_info[RTAX_DST]) {
+        if (sock_ntop(sa, strDestination, sizeof(strDestination)) == NULL)
+            throw ProbeException("sock_ntop strDestination");
+    }
+    if (sa = rti_info[RTAX_GATEWAY]) {
+        if (sock_ntop(sa, strGateway, sizeof(strGateway)) == NULL)
+            throw ProbeException("sock_ntop strGateway");
+    }
+
+    if (sa = rti_info[RTAX_NETMASK]) {
+        if (mask_ntop(sa, strDestinationMask, sizeof(strDestinationMask)) == NULL)
+            throw ProbeException("mask_ntop strDestinationMask");
+    }
+
+    free(buf);
+}
+#elif defined _LINUX && defined HAVE_RTMSG_STRUCT
+// From Stack Overflow: Getting gateway to use for a given ip in ANSI C, asked
+// by inquam, answered by nos. Modify according to the Linux manual of
+// rtnetlink(7), rtnetlink(3), netlink(7), netlink(3).
+
+extern "C" {
+    static int ifname(int ifIndex, char *ifName); 
+}
+
+static int ifname(int ifIndex, char *ifName)
+{
+    static int fd = -1;
+    struct ifreq ifr;
+    
+    if (fd < 0 && (fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0)
+	return -1;
+
+    ifr.ifr_ifindex = ifIndex;
+    if (ioctl(fd, SIOCGIFNAME, &ifr, sizeof(ifr)) < 0)
+	return -1;
+
+    strcpy(ifName, ifr.ifr_name);
+    return 0;
+}
+
+
+void ProbeAddressInfo::getRouteInfo(const struct in_addr *addr) throw(ProbeException)
+{
+    struct nlmsghdr *nlMsg;
+    struct rtmsg *rtMsg;
+    struct rtattr *rtAttr;
+    struct RouteInfo 
+    {
+	struct in_addr dstAddr;
+	struct in_addr srcAddr;
+	struct in_addr gateWay;
+	uint32_t netMask;
+	char ifName[IF_NAMESIZE];	// no need, just for debug
+    } *rtInfo;
+
+    // struct RouteInfo *rtInfo;
+    const int BUFLEN = 8192;
+    char msgBuf[BUFLEN];
+
+    int sock;
+    const int SEQ = 9999;
+    pid_t pid;
+    char *ptr;
+    int count;
+    ssize_t len, msgLen = 0;
+   
+    if ((sock = socket(AF_NETLINK, SOCK_DGRAM, NETLINK_ROUTE)) < 0)
+	throw ProbeException("socket PF_NETLINK");
+
+    bzero(msgBuf, sizeof(msgBuf));
+
+    nlMsg = (struct nlmsghdr *)msgBuf;
+    rtMsg = (struct rtmsg *)NLMSG_DATA(nlMsg);
+
+    // Fill in the nlmsg header
+    nlMsg->nlmsg_len = NLMSG_LENGTH(sizeof(struct rtmsg)); // length of message.
+    nlMsg->nlmsg_type = RTM_GETROUTE;			   // get the routes from kernel
+							   // routing table.
+    nlMsg->nlmsg_flags = NLM_F_DUMP | NLM_F_REQUEST;	   // request for dump.
+    nlMsg->nlmsg_seq = SEQ;				   // sequence of the message
+							   // sequence.
+    nlMsg->nlmsg_pid = pid = getpid();			   // PID of process sending the
+							   // request.
+    if (send(sock, nlMsg, nlMsg->nlmsg_len, 0) != nlMsg->nlmsg_len)
+	throw ProbeException("send nlmsg");
+
+    ptr = msgBuf;
+    do {
+	// Receive response from the kernel
+	if ((len = recv(sock, ptr, BUFLEN - msgLen, 0)) < 0)
+	    throw ProbeException("recv sock");
+
+	nlMsg = (struct nlmsghdr *)ptr;
+	// Check if the header is valid
+	if (!NLMSG_OK(nlMsg, len))
+	    throw ProbeException("received packet");
+	if (nlMsg->nlmsg_type == NLMSG_ERROR) {
+	    struct nlmsgerr *nlErr = (struct nlmsgerr *)NLMSG_DATA(nlMsg);
+	    if (nlErr->error < 0)
+		errno = -nlErr->error;
+	    throw ProbeException("received packet");
+	}
+
+	// Check if it's the last message
+	if (nlMsg->nlmsg_type == NLMSG_DONE)
+	    break;
+	else {
+	    // Else move the pointer to buffer appropriately
+	    ptr += len;
+	    msgLen += len;
+	}
+	
+	// Check if the message is a part of a multipart message terminated by
+	// NLMSG_DONE. Return if it's not.
+	if ((nlMsg->nlmsg_flags & NLM_F_MULTI) == 0)
+	    break;
+
+    } while (nlMsg->nlmsg_seq != (uint32_t)SEQ ||
+	     nlMsg->nlmsg_pid != (uint32_t)pid);
+
+    // Parse and record the response
+    if ((rtInfo = (struct RouteInfo *)malloc(sizeof(struct RouteInfo))) == NULL)
+	throw ProbeException("calloc RouteInfo");
+
+    for (
+	nlMsg = (struct nlmsghdr *)msgBuf;
+	NLMSG_OK(nlMsg, msgLen);
+	nlMsg = NLMSG_NEXT(nlMsg, msgLen) // will update the msgLen 
+    ) {
+	bzero(rtInfo, sizeof(struct RouteInfo));
+
+	rtMsg = (struct rtmsg *)NLMSG_DATA(nlMsg);
+	if (rtMsg->rtm_family != AF_INET ||
+	    rtMsg->rtm_table != RT_TABLE_MAIN)
+	    continue;
+
+	for (
+	    len = RTM_PAYLOAD(nlMsg), rtAttr = (struct rtattr *) RTM_RTA(rtMsg);
+	    RTA_OK(rtAttr, len);
+	    rtAttr = RTA_NEXT(rtAttr, len) // will update the len
+	) {
+	    switch (rtAttr->rta_type) {
+	    case RTA_OIF:
+		if (ifname(*(int *) RTA_DATA(rtAttr), rtInfo->ifName) < 0)
+		    throw ProbeException("ifname");
+		break;
+
+	    case RTA_GATEWAY:
+		rtInfo->gateWay.s_addr = *(in_addr_t *)RTA_DATA(rtAttr);
+		break;
+
+	    case RTA_PREFSRC:
+		rtInfo->srcAddr.s_addr = *(in_addr_t *)RTA_DATA(rtAttr);
+		break;
+
+	    case RTA_DST:
+		rtInfo->dstAddr.s_addr = *(in_addr_t *)RTA_DATA(rtAttr);
+
+		for (rtInfo->netMask = 0xffffffff,
+		     count = 32 - rtMsg->rtm_dst_len;
+		     count > 0; count--
+		) {
+		    rtInfo->netMask = rtInfo->netMask << 1;
+		}
+		break;
+	    }
+	}
+
+	if (verbose > 2) {
+	    std::cerr << ">>>> routing message <<<<" << std::endl;
+	    std::cerr << "source: " << inet_ntoa(rtInfo->srcAddr) << std::endl;
+	    std::cerr << "destination: " << inet_ntoa(rtInfo->dstAddr) << std::endl;
+	    std::cerr << "gateway: " << inet_ntoa(rtInfo->gateWay) << std::endl;
+	    std::cerr << "interface: " << rtInfo->ifName << std::endl;
+	    std::fprintf(stderr, "netmask: %08x\n", rtInfo->netMask);
+	}
+
+	uint32_t x = htonl(rtInfo->netMask);
+	if (
+	    // (*((uint32_t *)&addr->s_addr) & rtInfo->netMask) ==
+	    (*((uint32_t *)&addr->s_addr) & x) ==
+	    *((uint32_t *)&rtInfo->dstAddr.s_addr)
+	) {
+	    if (
+		inet_ntop(AF_INET, &rtInfo->dstAddr, strDestination, INET_ADDRSTRLEN) == NULL ||
+		inet_ntop(AF_INET, &rtInfo->gateWay, strGateway, INET_ADDRSTRLEN) == NULL ||
+		inet_ntop(AF_INET, (struct in_addr *)&x, strDestinationMask, INET_ADDRSTRLEN) == NULL
+	    )
+		throw ProbeException("inet_ntop");
+
+	    // std::cerr << "addr = " << inet_ntoa(*addr) << std::endl;
+	    // std::cerr << "mask = " << strDestinationMask << std::endl;
+	    
+	    // if (verbose <= 2)
+		break;
+	}
+    }
+
+    free(rtInfo);
+    close(sock);
+
+    return;
+    
+}
+#else
+void ProbeAddressInfo::getRouteInfo(const struct in_addr *addr) throw(ProbeException)
+{
+    const char str[] = "unsupported";
+    strncpy(strDestination, str, INET_ADDRSTRLEN);
+    strncpy(strGateway, str, INET_ADDRSTRLEN);
+    strncpy(strDestinationMask, str, INET_ADDRSTRLEN);
+
+    return;
+}
+
+#endif
+
+
+static const char *sock_ntop(const struct sockaddr *sa, char *buf, const ssize_t size)
+{
+    
+    switch(sa->sa_family) {
+    case AF_INET:
+    {
+        struct sockaddr_in *sin;
+        sin = (struct sockaddr_in *)sa;
+        if (inet_ntop(AF_INET, &sin->sin_addr, buf, size) == NULL)
+            return NULL;
+        return buf;
+    }
+#ifdef HAVE_SOCKADDR_DL_STRUCT
+    case AF_LINK:
+    {
+        snprintf(buf, size, "AF_LINK");
+        return buf;
+    }
+#endif
+    default:
+        snprintf(buf, size, "AF_xxx = %d", sa->sa_family);
+        return buf;
+    }
+
+    return NULL;
+}
+
+static const char *mask_ntop(const struct sockaddr *sa, char *buf, const ssize_t size)
+{
+    const unsigned char *ptr = (unsigned char *)&sa->sa_data[2];
+
+    uint8_t n;
+#ifdef HAVE_SOCKADDR_SA_LEN
+    n = sa->sa_len;
+#else
+    n = sizeof(*sa);
+#endif
+    
+    // fprintf(stderr, "! mask length = %d\n", sa->sa_len);
+    switch (n) {
+    case 0: 
+    {
+        snprintf(buf, size, "0.0.0.0");
+        return buf;
+    }
+    case 5:
+    {
+        snprintf(buf, size, "%d.0.0.0", *ptr);
+        return buf;
+    }
+    case 6:
+    {
+        snprintf(buf, size, "%d.%d.0.0", *ptr, *(ptr + 1));
+        return buf;
+    }
+    case 7:
+    {
+        snprintf(buf, size, "%d.%d.%d.0", *ptr, *(ptr + 1), *(ptr + 2));
+        return buf;
+    }
+    case 8:
+    {
+        snprintf(buf, size, "%d.%d.%d.%d", *ptr, *(ptr + 1), *(ptr + 2),
+                 *(ptr + 3));
+        return buf;
+    }
+    default:
+        // If sa_len is 255, means the local interface mask, for simplicity, we
+        // don't use ioctl to get local interfaces again.
+        snprintf(buf, size, "unknown mask");
+        return buf;
+    }
+
+    return NULL;
+}
+
+static const ssize_t ROUNDUP(const ssize_t a, const ssize_t size)
+{
+    // Round up 'a' to next multiple of 'size', which must be a power of 2
+    assert(a > 0 && size > 0);
+    if (a & (size - 1))
+        return 1 + (a | (size - 1));
+ 
+    return a;
+}
+
+static struct sockaddr *NEXT_SA(const struct sockaddr *sa)
+{
+    ssize_t n;
+
+#ifdef HAVE_SOCKADDR_SA_LEN
+    n = sa->sa_len;
+#else
+    n = sizeof(struct sockaddr);
+#endif
+
+    return (
+        (struct sockaddr *)
+        ((char *)sa + (n ? ROUNDUP(n, sizeof(u_long)) : sizeof(u_long)))
+    );
+    
+}

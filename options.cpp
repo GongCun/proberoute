@@ -4,7 +4,8 @@
 // don't start from zero
 enum { OPT_HELP = 1000, OPT_PROTO, OPT_SERV, OPT_DEV, OPT_SRCIP,
        OPT_SYN, OPT_ACK, OPT_PUSH, OPT_NULL, OPT_FIN, OPT_XMAS,
-       OPT_ECHO, OPT_ECHOREPLY, OPT_TSTAMP, OPT_TSTAMPREPLY, OPT_GATEWAY
+       OPT_ECHO, OPT_ECHOREPLY, OPT_TSTAMP, OPT_TSTAMPREPLY, OPT_GATEWAY,
+       OPT_TCP, OPT_UDP, OPT_ICMP, OPT_ALL
 };
 
 static void usage()
@@ -21,9 +22,10 @@ static struct poptOption po[] = {
     { "verbose",      'v',  POPT_ARG_NONE,   0,          'v',             NULL, NULL },
     { "help",         'h',  POPT_ARG_NONE,   0,          OPT_HELP,        NULL, NULL },
     { NULL,           'P',  POPT_ARG_STRING, 0,          OPT_PROTO,       NULL, NULL },
-    { "tcp",          '\0', POPT_ARG_VAL,    &protocol,  IPPROTO_TCP,     NULL, NULL },
-    { "udp",          '\0', POPT_ARG_VAL,    &protocol,  IPPROTO_UDP,     NULL, NULL },
-    { "icmp",         '\0', POPT_ARG_VAL,    &protocol,  IPPROTO_ICMP,    NULL, NULL },
+    { "tcp",          '\0', POPT_ARG_NONE,   0,          OPT_TCP,         NULL, NULL },
+    { "udp",          '\0', POPT_ARG_NONE,   0,          OPT_UDP,         NULL, NULL },
+    { "icmp",         '\0', POPT_ARG_NONE,   0,          OPT_ICMP,        NULL, NULL },
+    { "all",          'A',  POPT_ARG_NONE,   0,          OPT_ALL,         NULL, NULL },
     { "port",         'p',  POPT_ARG_STRING, 0,          OPT_SERV,        NULL, NULL },
     { "source-port",  'g',  POPT_ARG_INT,    &srcport,   0,               NULL, NULL },
     { "source-ip",    'S',  POPT_ARG_STRING, 0,          OPT_SRCIP,       NULL, NULL },
@@ -62,6 +64,12 @@ static void gatewayInit()
     return;
 }
 
+static void Push_back(int i)
+{
+    if (std::find(protoVec.begin(), protoVec.end(), i) == protoVec.end())
+	protoVec.push_back(i);
+}
+
 
 int parseOpt(int argc, char **argv, std::string& msg)
 {
@@ -80,16 +88,34 @@ int parseOpt(int argc, char **argv, std::string& msg)
         case OPT_PROTO:
             arg = poptGetOptArg(pc);
             if (!strcmp(arg, "TCP"))
-                protocol = IPPROTO_TCP;
+		Push_back(IPPROTO_TCP);
             else if (!strcmp(arg, "UDP"))
-                protocol = IPPROTO_UDP;
+                Push_back(IPPROTO_UDP);
             else if (!strcmp(arg, "ICMP"))
-                protocol = IPPROTO_ICMP;
+		Push_back(IPPROTO_ICMP);
             else {
 		msg = "unknown protocol: ";
 		msg += arg;
 		return -1;
 	    }
+            break;
+
+	case OPT_TCP:
+	    Push_back(IPPROTO_TCP);
+	    break;
+
+	case OPT_UDP:
+	    Push_back(IPPROTO_UDP);
+	    break;
+
+	case OPT_ICMP:
+	    Push_back(IPPROTO_ICMP);
+	    break;
+
+        case OPT_ALL:
+            Push_back(IPPROTO_TCP);
+            Push_back(IPPROTO_UDP);
+            Push_back(IPPROTO_ICMP);
             break;
 
         case OPT_SRCIP:
@@ -105,43 +131,43 @@ int parseOpt(int argc, char **argv, std::string& msg)
             break;
             
 	case OPT_SYN:
-	    flags = TH_SYN;
+	    tcpFlags = TH_SYN;
 	    break;
 
 	case OPT_ACK:
-	    flags = TH_ACK;
+	    tcpFlags = TH_ACK;
 	    break;
 
 	case OPT_PUSH:
-	    flags = TH_PUSH;
+	    tcpFlags = TH_PUSH;
 	    break;
 
 	case OPT_NULL:
-	    flags = 0;
+	    tcpFlags = 0;
 	    break;
 
 	case OPT_FIN:
-	    flags = TH_FIN;
+	    tcpFlags = TH_FIN;
 	    break;
 
 	case OPT_XMAS:
-	    flags = TH_FIN | TH_PUSH | TH_URG;
+	    tcpFlags = TH_FIN | TH_PUSH | TH_URG;
 	    break;
 
         case OPT_ECHO:
-            flags = ICMP_ECHO;
+            icmpFlags = ICMP_ECHO;
             break;
 
         case OPT_ECHOREPLY:
-            flags = ICMP_ECHOREPLY;
+            icmpFlags = ICMP_ECHOREPLY;
             break;
 
         case OPT_TSTAMP:
-            flags = ICMP_TSTAMP;
+            icmpFlags = ICMP_TSTAMP;
             break;
 
         case OPT_TSTAMPREPLY:
-            flags = ICMP_TSTAMPREPLY;
+            icmpFlags = ICMP_TSTAMPREPLY;
             break;
 
 	case OPT_HELP:
@@ -181,6 +207,10 @@ int parseOpt(int argc, char **argv, std::string& msg)
 
     if (poptPeekArg(pc) != NULL)
         service = poptGetArg(pc);
+
+    // Default protocol is TCP
+    if (protoVec.empty())
+	protoVec.push_back(IPPROTO_TCP);
 
     return 0;
 }

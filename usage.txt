@@ -14,6 +14,7 @@ Options
      --tcp        Specify the TCP protocol.
      --udp        Specify the UDP protocol.
      --icmp       Specify the ICMP protocol.
+ -A, --all        Same as '--tcp --udp --icmp'     
  -p, --port <portnum>
                   Set the destination port number for TCP or UDP,
                   default is 33434.
