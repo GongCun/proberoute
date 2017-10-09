@@ -1,24 +1,27 @@
 On Mac OS X
+===========
 
   $ brew install autoconf
   $ brew install popt
   $ autoheader
   $ autoconf
-  $ ./configure
+  $ touch ./config.h && ./configure
   $ make
 
 On GNU/Linux
+============
 
   $ yum -y install popt-devel
   $ autoheader
   $ autoconf
-  $ ./configure
+  $ touch ./config.h && ./configure
   $ make
 
 On AIX
+============
 
   $ rpm -Uvh popt*.ppc.rpm
   $ autoheader
   $ autoconf
-  $ ./configure
+  $ touch ./config.h && ./configure
   $ gmake

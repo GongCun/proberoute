@@ -621,17 +621,21 @@ default:
 			s = verbose ? "Bad IP length" : "!IP_HL";
 		    else {
 			switch (--code) {
-			case 3:	  // ICMP_UNREACH_PORT
-			    if (ip->ip_ttl <= 1)
-				s = verbose ? "Port unreachable" : "!";
+			case 0:	  // ICMP_UNREACH_NET
+			    s = verbose ? "Network unreachable" : "!N";
 			    break;
 
-			case 0:	  // ICMP_UNREACH_NET
-			    s = verbose ? "Net unreachable" : "!N";
+			case 1:	  // ICMP_UNREACH_HOST
+			    s = verbose ? "Host unreachable" : "!H";
 			    break;
 
 			case 2:	  // ICMP_UNREACH_PROTOCOL
 			    s = verbose ? "Protocol unreachable" : "!P";
+			    break;
+
+			case 3:	  // ICMP_UNREACH_PORT
+			    if (ip->ip_ttl <= 1)
+				s = verbose ? "Port unreachable" : "!";
 			    break;
 
 			case 4:	  // ICMP_UNREACH_NEEDFRAG
@@ -645,7 +649,7 @@ default:
 			    break;
 
 			case 6:	  // ICMP_UNREACH_NET_UNKNOWN
-			    s = verbose ? "Unknown net" : "!U";
+			    s = verbose ? "Unknown network" : "!U";
 			    break;
 
 			case 7:	  // ICMP_UNREACH_HOST_UNKNOWN
@@ -657,7 +661,7 @@ default:
 			    break;
 
 			case 9:	  // ICMP_UNREACH_NET_PROHIB
-			    s = verbose ? "Admin prohibited net" : "!A";
+			    s = verbose ? "Admin prohibited network" : "!A";
 			    break;
 
 			case 10:  // ICMP_UNREACH_HOST_PROHIB
@@ -665,7 +669,7 @@ default:
 			    break;
 
 			case 11:  // ICMP_UNREACH_TOSNET
-			    s = verbose ? "Bad tos for net" : "!Q";
+			    s = verbose ? "Bad tos for network" : "!Q";
 			    break;
 
 			case 12:  // ICMP_UNREACH_TOSHOST
