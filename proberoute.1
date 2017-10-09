@@ -190,7 +190,10 @@ Send the probe packets with a bogus checksum. Since virtually all host IP stacks
 .B \-\-badlen
 Send the probe packets with a bad IP option length (by IP timestamp option). An ICMP Parameter Problem error message will be sent when a router (MUST generate this message) or a host (SHOULD generate this message) finds a problem with the IP header parameters. This option is not very helpful for tracing.
 .TP \w'names'u+4
-.B \-e, \-\-echo \fB|\fP \-\-echo\-reply
+.B \-e, \-\-echo
+.sp -1
+.TP \w'names'u+4
+.B "    \-\-echo\-reply"
 Send ICMP echo/echo\-reply probes. when the firewall is opened:
 .RS \w'names'u+4
 .IP \(bu
@@ -199,7 +202,10 @@ The \fBICMP_ECHO\fP probe causes the target host MUST response the \fBICMP_ECHOR
 The \fBICMP_ECHOREPLY\fP probe causes the target host MAY response the \fBICMP_UNREACH_PORT\fP message\&.
 .RE
 .TP \w'names'u+4
-.B \-t, \-\-tstamp \fB|\fP \-\-tstamp\-reply
+.B \-t, \-\-tstamp
+.sp -1
+.TP \w'names'u+4
+.B "    \-\-tstamp\-reply"
 Send ICMP timestamp/timestamp\-reply probes. when the firewall is opened:
 .RS \w'names'u+4
 .IP \(bu
