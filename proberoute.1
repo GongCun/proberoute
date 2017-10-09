@@ -10,58 +10,59 @@ proberoute [OPTION] DEST
 proberoute [OPTION] DEST PORT
 .PP 
 .SH "DESCRIPTION"
-.IP
-.br
-.B
-Attention:
-The proberoute command is only intended for use in network testing, measurement, and management. \
-It should be used primarily for manual fault isolation. Because of the load it imposes on the network and security issues, \
-the proberoute command requires super-user privileges, and should not be used during normal operations or \
-from automated scripts.
+.PP
+.in +.5i
+.ll -.5i
+.B Attention:
+The proberoute command is only intended for use in network
+testing, measurement, and management\&. It should be used primarily
+for manual fault isolation\&. Because of the load it imposes on the
+network and causes some security implications, the proberoute command
+requires super-user privileges, and should not be used during normal
+operations or from automated scripts\&.
+.in
+.ll
 .PP
 Proberoute is a program that behaves in much the same way that
-\fBtraceroute(8)\fP does, but has more options\&. \
-The proberoute command attempts to trace the route an/multiple IP packet(s) follows to an Internet host by \
-launching UDP/TCP/ICMP probe packets with a small maximum time-to-live (Max_ttl variable), then listening for an ICMP
-.B
-TIME_EXCEEDED
-response from gateways along the way. Probes are started with an Max_ttl value of one hop, which is increased one hop \
+\fBtraceroute(8)\fP does, but has more options\&. The proberoute
+command attempts to trace the route an IP packet follows to a target
+host by launching UDP/TCP/ICMP probe packets with a small maximum
+time\-to\-live (Max_ttl variable), then listening for an ICMP
+.B TIME_EXCEEDED
+response from gateways along the way\&. Probes are
+started with an Max_ttl value of one hop, which is increased one hop
 at a time until an ICMP
-.B
-PORT_UNREACHABLE,
-.B
-ICMP_ECHOREPLY,
-.B
-ICMP_TSTAMPREPLY
+.B PORT_UNREACHABLE,
+.B ICMP_ECHOREPLY,
+.B ICMP_TSTAMPREPLY
 or
 TCP
-.B
-RST,
-.B
-SYN,
-.B
-ACK
-messages is returned, that indicates the host has been located.
+.B RST,
+.B SYN,
+.B ACK
+messages is returned\&. These messages indicates that the host has been
+located.
 .PP
-Unlike the traceroute program, the proberoute default sends the three
-.B
-TCP
-probes at each Max_ttl setting  to record the following:
+Unlike the traceroute program, the proberoute default sends three TCP
+probes at each Max_ttl setting to record the following:
 .br
 .nf
-*   The TTL value
+*   Max_ttl value
 .br
 *   Address of the gateway
 .br
 *   Round-trip time of each successful probe
 .fi
 .PP
-The number of probes send sent can be increased by using the \fB\-q\fP flag. If the probe answers come from \
-different gateways, the command prints the address of each responding system. If the there is no response from \
-a probe within a 3-second time-out interval, an \fB*\fP (asterisk) is printed for the probe.
+The number of probes sent can be increased by using the \fB\-q\fP
+flag\&. If the probe answers come from different gateways, the command
+prints the address of each responding system. If there is no
+response from a probe within a 3-second time\-out interval, an
+\fB*\fP (asterisk) is printed for that probe.
 .PP
-The proberoute command prints an \fB!\fP (exclamation mark) with an abbreviation \
-before the round-trip time indicates that received ICMP notification message:
+The proberoute command prints an \fB!\fP (exclamation mark) with an
+abbreviation before the round-trip time indicates that received the ICMP
+notification message:
 .PP
 .IP Item
 .br
@@ -131,13 +132,15 @@ Host precedence violation
 .br
 Precedence cutoff
 .PP 
-Increase the verbosity by \fB-v\fP option will show the detail output. \
-When received the ICMP need fragment notification (!F flag), the proberoute \
-program will change the next hop MTU with the same Max_ttl value and trying again. \
-If the majority of probes result in an error, the proberoute command exits.
+Increase the verbosity by \fB-v\fP flag will show the detail
+message\&. When received the ICMP Need Fragment error message (!F
+flag), the proberoute program will change the next hop MTU with the
+same Max_ttl value and trying again\&. If the ICMP error message is not
+expected, the proberoute command will exit\&.
 
-The TCP/UDP probe packets are set to an unlikely value so as to prevent processing by \
-the destination host. You can change the destination port with \fB-p\fP option.
+The TCP/UDP probe packets are set to an unlikely value so as to
+prevent processing by the destination host\&. You can change the
+destination port with \fB-p\fP option\&.
 .PP 
 .SH "OPTIONS"
 .PP
@@ -149,7 +152,7 @@ Destination
 Verbose output, multiple -v options increase the verbosity.
 .TP \w'names'u+4
 .B \-h, \-\-help
-Show this help.
+Show the brief help message.
 .TP \w'names'u+4
 .BI \-P " protocol"
 Send packets of specified IP protocol.
@@ -157,111 +160,141 @@ Send packets of specified IP protocol.
 protocol
 should be \&"TCP\&", \&"UDP\&" or \&"ICMP\&". Alternately, you can specify the
 .B
-\-\-tcp, \-\-udp
+\-\-tcp, \-\-udp,
 or
 .B
 \-\-icmp
-options.
+flags\&.
 .B
 Note:
-these options are not mutually exclusive and can be specified at the same time\&.
+these options can be specified at the same time\&.
 .TP \w'names'u+4
 .B \-A, \-\-all
 Same as '--tcp --udp --icmp'\&.
 .TP \w'names'u+4
 .BI \-p,\ \-\-port " portnum"
-Set the base destination port number for TCP or UDP, the default is 33434. \
-The proberoute command will increment the UDP port number every Max_ttl, \
-but keep the TCP port number unchanged.
-.br
+Set the base destination port number for TCP or UDP, the default is
+33434\&. The proberoute command will increment the UDP port number
+every Max_ttl, but keep the TCP port number unchanged\&.
 .B
-Note:
-when UDP and TCP probe packets are used simultaneously, this option is valid only for TCP probes, while UDP base port number is fixed to 33434.
+Note: when UDP and TCP probe packets are used at the same time, this
+option is valid only for TCP probes, while UDP base port number is
+fixed to 33434\&.
 .TP \w'names'u+4
 .BI \-g,\ \-\-source\-port " portnum"
-For UDP, TCP, set the source port number used in probes. The default is random port.
+For UDP, TCP, set the source port number used in probes\&. The default
+is random port\&.
 .TP \w'names'u+4
 .BI \-S,\ \-\-source\-ip " IPaddr"
-Set the source address for probes, must use \fB-i\fP option to specify the \
-interface you wish to send\&.
+Set the source address for probes, must use \fB-i\fP option to specify
+the interface you wish to send\&.
 .TP \w'names'u+4
 .BI \-i " interface"
-Specify a network interface to send probes and obtain the source IP address \
-for outgoing probe packets\&.
+Specify a network interface to send probes and obtain the source IP
+address for outgoing probe packets\&.
 .TP \w'names'u+4
 .BI \-q " nqueries"
-Specifies the number of probe packets the traceroute command sends at each Max_ttl setting\&. \
-The default is three probes\&.
+Specifies the number of probe packets the traceroute command sends at
+each Max_ttl setting\&. The default is three probes\&.
 .TP \w'names'u+4
 .BI \-w " waittime"
-Sets the time (in seconds) to wait for a response to a probe\&. The default is 3 seconds\&.
+Sets the time (in seconds) to wait for a response to a probe\&. The
+default is 3 seconds\&.
 .TP \w'names'u+4
 .BI \-f " first_ttl"
-Set hte initial time-to-live used in outgoing probe packets\&. The default is 1, i\&.e\&., \
-start with the first hop.
+Set the initial time\-to\-live used in outgoing probe packets\&. The
+default is 1, i\&.e\&., start with the first hop\&.
 .TP \w'names'u+4
 .BI \-m " max_ttl"
-Set the max time-to-live (max number of hops) used in outgoing probe packets.
+Set the max time\-to\-live (max number of hops) used in outgoing probe packets.
 .TP \w'names'u+4
 .BI \-F,\ \-\-frag\-size " frag_size"
-Specify the IP fragment size (must be a multiple of eight). Because some firewalls don't check the \
-fragmented packets for performance reasons, fragments are possible to reach the host.
+Specify the IP fragment size (must be a multiple of eight)\&. Because
+some firewalls don't check the fragmented packets for performance
+reasons, fragments are possible to reach the host\&.
 .TP \w'names'u+4
 .BI \-s,\ \-\-mtu " MTUsize"
-Using the specified MTU as the probe packets size. Default is auto detection.
-.br
+Using the specified MTU as the probe packets size\&. Default is auto
+detection\&.
 .B
-Note,
-when UDP and other protocols are used simultaneously, this option is valid only for other protocols. while UDP packet length is fixed to 52-byte.
+Note: when UDP and other protocols are used at the same time, this
+option is only valid for other protocols while the UDP packet length is
+fixed to 52-byte\&.
 .TP \w'names'u+4
 .B \-\-conn \fR(TCP connect probe)\fP
-TCP connect probe is usable for detect the path MTU when the firewall only opens the rules for the specific TCP port. When the connection is established, the proberoute program will send the out-of-sequence probe packet with specific length and TCP flags (usually with \fB\-\-ack\fP optio), for preventing processing by the destination host\&.
+TCP connect probe is usable for detecting the path MTU when the
+firewall only opening for the specific TCP port\&. When the connection
+established, the proberoute program will send the out\-of\-sequence
+probe packet with specific length and TCP flags (usually with
+\fB\-\-ack\fP flag), for preventing processing by the destination
+host\&.
 .TP \w'names'u+4
 .B \-\-syn\fR/\fPack\fR/\fPpush\fR/\fPnull\fR/\fPfin\fR/\fPxmas
-Use TCP SYN, ACK, PUSH, Null, FIN and Xmas probes with \fB\-\-tcp\fP option. This feature comes from the \fBnmap(1)\fP program. \fB\-\-null\fP option doesn't set any bits (TCP flag header is 0), \fB\-\-xmas\fP sets the FIN, PSH, and URG flags. When the firewall is opened, references to RFC 793 (Page 65)
+Use TCP SYN, ACK, PUSH, Null, FIN and Xmas probes with \fB\-\-tcp\fP
+option\&. This feature comes from the \fBnmap(1)\fP
+program\&. \fB\-\-null\fP option doesn't set any bits (TCP flag header
+is 0), \fB\-\-xmas\fP sets the FIN, PSH, and URG flags. When the
+firewall is open, references to the RFC 793 (Page 65)
 .RS \w'names'u+4
 .IP \(bu
-If the target host state is CLOSED, an incoming segment not containing a RST causes a RST to be sent in response.
+If the target host state is CLOSED, an incoming segment not containing
+a RST causes a RST to be sent in response\&.
 .IP \(bu
-If the target host state is LISTEN, any acknowledgment segment causes a RST to be sent in response.
+If the target host state is LISTEN, any acknowledgment segment causes
+a RST to be sent in response\&.
 .IP \(bu
-If the target host state is LISTEN, the SYN packet causes a SYN + ACK to be sent in response.
+If the target host state is LISTEN, the SYN packet causes a SYN + ACK
+to be sent in response\&.
 .IP \(bu
-If the target host state is ESTABLISHED, the out-of-sequence packet causes an ACK should be sent in reply.
+If the target host state is ESTABLISHED, the out\-of\-sequence packet
+causes an ACK should be sent in response\&.
 .RE
 .TP \w'names'u+4
 .B \-\-badsum
-Send the probe packets with a bogus checksum. Since virtually all host IP stacks properly drop these packets, any responses received are likely coming from a firewall or IDS that didn't bother to verify the checksum.
+Send the probe packets with a bogus checksum\&. Since virtually all
+host IP stacks properly drop these packets, any responses received are
+likely coming from a firewall or IDS that didn't bother to verify the
+checksum\&.
 .TP \w'names'u+4
 .B \-\-badlen
-Send the probe packets with a bad IP option length (by IP timestamp option). An ICMP Parameter Problem error message will be sent when a router (MUST generate this message) or a host (SHOULD generate this message) finds a problem with the IP header parameters. This option is not very helpful for tracing.
+Send the probe packets with a bad IP option length (by IP timestamp
+option)\&. An ICMP Parameter Problem error message will be sent when a
+router (MUST generate this message) or a host (SHOULD generate this
+message) finds a problem with the IP header parameters\&. This option is
+not very helpful for tracing route\&.
 .TP \w'names'u+4
 .B \-e, \-\-echo
 .sp -0.8v
 .TP \w'names'u+4
 .B \-\-echo\-reply
-Send ICMP echo/echo\-reply probes. when the firewall is opened:
+Send ICMP echo/echo\-reply probes\&. when the firewall is open:
 .RS \w'names'u+4
 .IP \(bu
-The \fBICMP_ECHO\fP probe causes the target host MUST response the \fBICMP_ECHOREPLY\fP message\&.
+The \fBICMP_ECHO\fP probe causes the target host MUST response the
+\fBICMP_ECHOREPLY\fP message\&.
 .IP \(bu
-The \fBICMP_ECHOREPLY\fP probe causes the target host MAY response the \fBICMP_UNREACH_PORT\fP message\&.
+The \fBICMP_ECHOREPLY\fP probe causes the target host MAY response the
+\fBICMP_UNREACH_PORT\fP message\&.
 .RE
 .TP \w'names'u+4
 .B \-t, \-\-tstamp
 .sp -0.8v
 .TP \w'names'u+4
 .B \-\-tstamp\-reply
-Send ICMP timestamp/timestamp\-reply probes. when the firewall is opened:
+Send ICMP timestamp/timestamp\-reply probes\&. when the firewall is open:
 .RS \w'names'u+4
 .IP \(bu
-The \fBICMP_TSTAMP\fP probe causes the target host MAY response the \fBICMP_TSTAMPREPLY\fP message\&.
+The \fBICMP_TSTAMP\fP probe causes the target host MAY response the
+\fBICMP_TSTAMPREPLY\fP message\&.
 .IP \(bu
-The \fBICMP_TSTAMPREPLY\fP probe causes the target host MAY response the \fBICMP_UNREACH_PORT\fP message\&.
+The \fBICMP_TSTAMPREPLY\fP probe causes the target host MAY response
+the \fBICMP_UNREACH_PORT\fP message\&.
 .RE
 .TP \w'names'u+4
 .BI \-j,\ \-\-source-route " gateway"
-Sets IP Loose Source Route option. Tell the network to route the packet through the specified gateway (Unfortunately, most routers have disabled source routing for security reasons)\&.
+Sets IP Loose Source Route option\&. Tell the network to route the
+packet through the specified gateway (Unfortunately, most routers have
+disabled source routing for security reasons)\&.
 .PP
 .SH "PARAMETERS"
 .PP
@@ -270,32 +303,43 @@ Sets IP Loose Source Route option. Tell the network to route the packet through 
 Destination
 .TP \w'names'u+4
 .B HOST
-Specifies the destination host, either by host name or IP number. This parameter is required.
+Specifies the destination host, either by host name or IP number. This
+parameter is required\&.
 .TP \w'names'u+4
 .B PORT
-Specifies the destination port for TCP or UDP protocol. The default port is 33434.
+Specifies the destination port or service for TCP or UDP protocol\&. The
+default port is 33434\&.
 .PP
 .SH "SECURITY"
-This command requires privileged users due to using \fBlibpcap\fP and raw socket.
+This command requires privileged users due to using \fBlibpcap\fP and
+raw socket\&.
 .PP
 .SH "SEE ALSO"
 traceroute(8), nmap(1), ping(1)
 .PP
 .SH "WARNING"
-Since the \fB\-\-frag\-size\fP can split the packet into eight bytes, so a 20-byte TCP header would be split into three packets, but this feature may not be supported on some systems.
+Since the \fB\-\-frag\-size\fP can split the packet into eight bytes,
+so a 20-byte TCP header would be split into three packets, but this
+feature can not be supported on some systems\&.
 .PP
 .SH BUGS
-Specify the fragment size of eight bytes MAY causes the AIX system crash. In addition, the TCP packet can't be fragmented less than the size of header. Any bug should be reported it to Cun Gong <gong_cun@bocmacau.com>
+Specify the fragment size of eight bytes MAY causes the AIX system
+crash\&. In addition, the TCP packet can't be fragmented less than the
+size of header on AIX\&. Any bug should be reported to Cun Gong
+<gong_cun@bocmacau.com>\&.
 .PP
 .SH COPYRIGHT
 Copyright (C) 2017 Cun Gong
 .PP
-This is free software; see the source for copying conditions. There is NO warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+This is free software; see the source for copying conditions. There is
+NO warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR
+PURPOSE\&.
 .PP
-Released under the BSD 3-clause "New" or "Revised" License.
+Released under the BSD 3-clause "New" or "Revised" License\&.
 .PP
 .SH AVAILABILITY
-The source code of proberoute command is available from https://github.com/GongCun/proberoute\&.
+The source code of proberoute command is available from
+https://github.com/GongCun/proberoute\&.
 
 
 
