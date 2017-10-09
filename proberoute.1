@@ -63,27 +63,73 @@ a probe within a 3-second time-out interval, an \fB*\fP (asterisk) is printed fo
 The proberoute command prints an \fB!\fP (exclamation mark) with an abbreviation \
 before the round-trip time indicates that received ICMP notification message:
 .PP
-.nf
-.ft CW
-Item Description
-!    Port unreachable
-!H   Host unreachable
-!N   Network unreachable
-!P   Protocol unreachable
-!F   Need fragment
-!S   Source route failed
-!U   Unknown network
-!W   Unknown host
-!I   Source route isolated
-!A   Admin prohibited network
-!Z   Admin prohibited host
-!Q   Bad tos for network
-!T   Bad tos for host
-!X   Admin prohibited filter
-!V   Host precedence violation
-!C   Precedence cutoff
-.ft R
-.fi
+.IP Item
+.br
+Description
+.sp -1
+.IP !
+.br
+Port unreachable
+.sp -1
+.IP !H
+.br
+Host unreachable
+.sp -1
+.IP !N
+.br
+Network unreachable
+.sp -1
+.IP !P
+.br
+Protocol unreachable
+.sp -1
+.IP !F
+.br
+Need fragment
+.sp -1
+.IP !S
+.br
+Source route failed
+.sp -1
+.IP !U
+.br
+Unknown network
+.sp -1
+.IP !W
+.br
+Unknown host
+.sp -1
+.IP !I
+.br
+Source route isolated
+.sp -1
+.IP !A
+.br
+Admin prohibited network
+.sp -1
+.IP !Z
+.br
+Admin prohibited host
+.sp -1
+.IP !Q
+.br
+Bad tos for network
+.sp -1
+.IP !T
+.br
+Bad tos for host
+.sp -1
+.IP !X
+.br
+Admin prohibited filter
+.sp -1
+.IP !V
+.br
+Host precedence violation
+.sp -1
+.IP !C
+.br
+Precedence cutoff
 .PP 
 Increase the verbosity by \fB-v\fP option will show the detail output. \
 When received the ICMP need fragment notification (!F flag), the proberoute \
@@ -191,9 +237,9 @@ Send the probe packets with a bogus checksum. Since virtually all host IP stacks
 Send the probe packets with a bad IP option length (by IP timestamp option). An ICMP Parameter Problem error message will be sent when a router (MUST generate this message) or a host (SHOULD generate this message) finds a problem with the IP header parameters. This option is not very helpful for tracing.
 .TP \w'names'u+4
 .B \-e, \-\-echo
-.sp -1
+.sp -0.8v
 .TP \w'names'u+4
-.B "    \-\-echo\-reply"
+.B \-\-echo\-reply
 Send ICMP echo/echo\-reply probes. when the firewall is opened:
 .RS \w'names'u+4
 .IP \(bu
@@ -203,9 +249,9 @@ The \fBICMP_ECHOREPLY\fP probe causes the target host MAY response the \fBICMP_U
 .RE
 .TP \w'names'u+4
 .B \-t, \-\-tstamp
-.sp -1
+.sp -0.8v
 .TP \w'names'u+4
-.B "    \-\-tstamp\-reply"
+.B \-\-tstamp\-reply
 Send ICMP timestamp/timestamp\-reply probes. when the firewall is opened:
 .RS \w'names'u+4
 .IP \(bu
