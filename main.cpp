@@ -634,8 +634,17 @@ default:
 			    break;
 
 			case 3:	  // ICMP_UNREACH_PORT
-			    if (ip->ip_ttl <= 1)
-				s = verbose ? "Port unreachable" : "!";
+                            // FIX ME:
+                            //   
+                            //   The classic traceroute prints a "!" after the
+                            //   time if the ttl is <= 1 since the obsoleted
+                            //   router will use the ttl from the arriving probe
+                            //   datagram as the ttl in its ICMP reply. So we
+                            //   should probe with a ttl that's at least twice
+                            //   the path length. (BUT this situation is rarely
+                            //   seen.)
+                            s = verbose ? "Port unreachable" :
+                                (ip->ip_ttl <= 1) ? "!" : "!PORT";
 			    break;
 
 			case 4:	  // ICMP_UNREACH_NEEDFRAG
