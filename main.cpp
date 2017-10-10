@@ -643,8 +643,16 @@ default:
                             //   should probe with a ttl that's at least twice
                             //   the path length. (BUT this situation is rarely
                             //   seen.)
-                            s = verbose ? "Port unreachable" :
-                                (ip->ip_ttl <= 1) ? "!" : "!PORT";
+			    if (ip->ip_ttl <= 1)
+				s = verbose ? "Port unreachable" : "!";
+			    else {
+				struct ip *origip = (struct ip *)(
+				    (char *)ip + (ip->ip_hl << 2) + PROBE_ICMP_LEN
+				);
+				if (origip->ip_p != IPPROTO_UDP) {
+				    s = verbose ? "Port unreachable" : "!PORT";
+				}
+			    }
 			    break;
 
 			case 4:	  // ICMP_UNREACH_NEEDFRAG

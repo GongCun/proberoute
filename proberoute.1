@@ -14,12 +14,12 @@ proberoute [OPTION] DEST PORT
 .in +.5i
 .ll -.5i
 .B Attention:
-The proberoute command is only intended for use in network
-testing, measurement, and management\&. It should be used primarily
-for manual fault isolation\&. Because of the load it imposes on the
-network and causes some security implications, the proberoute command
-requires super-user privileges, and should not be used during normal
-operations or from automated scripts\&.
+The proberoute command is only intended for use in network testing,
+measurement, and management\&. It should be used primarily for manual
+fault isolation\&. Because of the load it imposes on the network and
+causes some security implications, the proberoute command requires
+super-user privileges, and should not be used during normal operations
+or from automated scripts\&. See the \fBSECURITY\fP section\&.
 .in
 .ll
 .PP
@@ -45,14 +45,14 @@ located.
 .PP
 Unlike the traceroute program, the proberoute default sends three TCP
 probes at each Max_ttl setting to record the following:
-.br
-.nf
-*   Max_ttl value
-.br
-*   Address of the gateway
-.br
-*   Round-trip time of each successful probe
-.fi
+.PD 0
+.IP *
+Max_ttl value
+.IP *
+Address of the gateway
+.IP *
+Round-trip time of each successful probe
+.PD
 .PP
 The number of probes sent can be increased by using the \fB\-q\fP
 flag\&. If the probe answers come from different gateways, the command
@@ -64,81 +64,65 @@ The proberoute command prints an \fB!\fP (exclamation mark) with an
 abbreviation before the round-trip time indicates that received the ICMP
 notification message:
 .PP
+.PD 0
 .IP Item
 .br
 Description
-.sp -1
 .IP !
 .br
 Port unreachable (the ttl is <= 1)
-.sp -1
 .IP !PORT
 .br
 Port unreachable
-.sp -1
 .IP !H
 .br
 Host unreachable
-.sp -1
 .IP !N
 .br
 Network unreachable
-.sp -1
 .IP !P
 .br
 Protocol unreachable
-.sp -1
 .IP !F
 .br
 Need fragment
-.sp -1
 .IP !S
 .br
 Source route failed
-.sp -1
 .IP !U
 .br
 Unknown network
-.sp -1
 .IP !W
 .br
 Unknown host
-.sp -1
 .IP !I
 .br
 Source route isolated
-.sp -1
 .IP !A
 .br
 Admin prohibited network
-.sp -1
 .IP !Z
 .br
 Admin prohibited host
-.sp -1
 .IP !Q
 .br
 Bad tos for network
-.sp -1
 .IP !T
 .br
 Bad tos for host
-.sp -1
 .IP !X
 .br
 Admin prohibited filter
-.sp -1
 .IP !V
 .br
 Host precedence violation
-.sp -1
 .IP !C
 .br
 Precedence cutoff
-.sp -1
 .IP !TTL
 .br
 Time exceeded
+.PD
 .PP 
 Increase the verbosity by \fB-v\fP flag will show the detail
 message\&. When received the ICMP Need Fragment error message (!F
@@ -201,7 +185,9 @@ address for outgoing probe packets\&.
 .TP \w'names'u+4
 .BI \-q " nqueries"
 Specifies the number of probe packets the traceroute command sends at
-each Max_ttl setting\&. The default is three probes\&.
+each Max_ttl setting\&. The default is three probes\&. Note that some
+routers and hosts can use ICMP rate throttling. In such a situation
+specifying too large number can lead to loss of some responses\&.
 .TP \w'names'u+4
 .BI \-w " waittime"
 Sets the time (in seconds) to wait for a response to a probe\&. The
@@ -233,13 +219,20 @@ established, the proberoute program will send the out\-of\-sequence
 probe packet with specific length and TCP flags (usually with
 \fB\-\-ack\fP flag), for preventing processing by the destination
 host\&.
+.sp
+Because of using
+.B connect(2)
+call will make the tcp session full opening, not recommended for
+normal use, because a destination application is always affected (and
+can be confused)\&. For the same reason, if the destination is in the
+same subnet (ttl = 1), Proberoute never call \fBconnect(2)\fP\&.
 .TP \w'names'u+4
 .B \-\-syn\fR/\fPack\fR/\fPpush\fR/\fPnull\fR/\fPfin\fR/\fPxmas
 Use TCP SYN, ACK, PUSH, Null, FIN and Xmas probes with \fB\-\-tcp\fP
 option\&. This feature comes from the \fBnmap(1)\fP
 program\&. \fB\-\-null\fP option doesn't set any bits (TCP flag header
 is 0), \fB\-\-xmas\fP sets the FIN, PSH, and URG flags. When the
-firewall is open, references to the RFC 793 (Page 65)
+firewall is open, refer to the RFC 793 (Page 65)
 .RS \w'names'u+4
 .IP \(bu
 If the target host state is CLOSED, an incoming segment not containing
@@ -269,9 +262,10 @@ message) finds a problem with the IP header parameters\&. This option is
 not very helpful for tracing route\&.
 .TP \w'names'u+4
 .B \-e, \-\-echo
-.sp -0.8v
+.PD 0
 .TP \w'names'u+4
 .B \-\-echo\-reply
+.PD
 Send ICMP echo/echo\-reply probes\&. when the firewall is open:
 .RS \w'names'u+4
 .IP \(bu
@@ -283,9 +277,10 @@ The \fBICMP_ECHOREPLY\fP probe causes the target host MAY response the
 .RE
 .TP \w'names'u+4
 .B \-t, \-\-tstamp
-.sp -0.8v
+.PD 0
 .TP \w'names'u+4
 .B \-\-tstamp\-reply
+.PD
 Send ICMP timestamp/timestamp\-reply probes\&. when the firewall is open:
 .RS \w'names'u+4
 .IP \(bu
@@ -375,23 +370,50 @@ us), perhaps due to the firewall rules. You can try proberoute's
 advanced options for firewall evasion or spoofing under the permission
 from the network administrator\&.
 .PP
-.SH "SECURITY"
-This command requires privileged users due to using \fBlibpcap\fP and
-raw socket\&.
+.SH FILES
+Proberoute relies on \fBlibpcap\fP library, which provide common
+methods to access the datalink layer by wrapping the BSD Packet Filter
+(BPF), the Linux PF_PACKET interface, or other methods.
+.PP
+.PD 0
+.IP Item
+.br
+Description
+.IP /usr/lib/libpcap.a
+.br
+libpcap library file
+.IP /dev/bpf?
+BPF device
+.br
+.IP /proc/net/dev
+Network interfaces information
+.PD
 .PP
 .SH "SEE ALSO"
 traceroute(8), nmap(1), ping(1)
 .PP
+.SH "SECURITY"
+This command requires privileged users due to using \fBlibpcap\fP and
+raw socket\&.
+.PP
+When used properly, Proberoute helps to detect the routing problems and
+location errors\&. But when used improperly, Proberoute could (in rare
+cases) cause damage to the network or host\&, even get you sued,
+fired, or banned by your ISP\&.
+.PP
+Refer to the advice from Lyon (author of Nmap), the best way to avoid
+controversy when using Proberoute is to always secure written
+authorization from the target network representatives before
+initialing any probing\&.
+.PP
 .SH "WARNING"
 Since the \fB\-\-frag\-size\fP can split the packet into eight bytes,
 so a 20-byte TCP header would be split into three packets, but this
-feature can not be supported on some systems\&.
+feature is not supported or even dangerous on some systems\&.
 .PP
-.SH BUGS
-Specify the fragment size of eight bytes MAY causes the AIX system
-crash\&. In addition, the TCP packet can't be fragmented less than the
-size of header on AIX\&. Any bug should be reported to Cun Gong
-<gong_cun@bocmacau.com>\&.
+Especially the fragment size of eight bytes MAY causes the AIX system
+crash immediately\&. In addition, the TCP packet can't be fragmented
+less than the size of header on AIX system\&.
 .PP
 .SH COPYRIGHT
 Copyright (C) 2017 Cun Gong
@@ -404,4 +426,21 @@ Released under the BSD 3-clause "New" or "Revised" License\&.
 .PP
 .SH AVAILABILITY
 The source code of proberoute command is available from
-https://github.com/GongCun/proberoute\&.
+https://github.com/GongCun/proberoute, it's very much welcome to
+participate in the development and help to improve Proberoute\&.
+.PP
+.SH BUGS
+The following is a list of those features not yet implemented:
+.PD 0
+.IP *
+IPv6 supporting
+.IP *
+Reverse	DNS lookups (PTR)
+.IP *
+Autonomous System (AS) path lookups
+.IP *
+Sending several probes concurrently
+.PD
+.PP
+If you found any bug, please report it to Cun Gong
+<gong_cun@bocmacau.com>, thank you very much\&.
