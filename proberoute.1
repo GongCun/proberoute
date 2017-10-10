@@ -159,6 +159,37 @@ or
 \-\-icmp
 flags\&.
 Note that these options can be specified at the same time\&.
+.RS \w'names'u+4
+.IP \fB\-\-tcp\fP
+Send the TCP SYN probe packets, this technique is often referred to as
+half\-open scanning, because you don't open a full TCP
+connection\&. The default destination port is 33434, which can be
+changed with \fB\-p\fP flags\&. Refer to the RFC 793 and Nmap
+.B \-sS
+option, A SYN/ACK indicates the port is listening (open), while a RST
+(reset) is indicative of a non-listener\&. If no response is received
+after several retransmissions, the probe is marked as \fB*\fP
+(asterisk)\&. The hop IP can also be fetched if an ICMP unreachable
+error (type 3, code 0, 1, 2, 3, 9, 10, or 13) is received. The port is
+also considered open if a SYN packet (without the ACK flag) is
+received in response\&.
+.IP \fB\-\-udp\fP
+Send the UDP probe packets\&. The default destination port is
+33434\&. For some common ports such as 53 (DNS), 161 (SNMP), 67/68
+(DHCP), etc\&., which can be specified with \fB\-p\fP or \fB-g\fP
+flags, a port\-specific probe is sent to increase response rate\&. If
+an ICMP Port Unreachable error (type 3, code 3) is returned, the host
+is reachable (the port is closed)\&. Other ICMP Unreachable errors
+(type 3, codes 0, 1, 2, 9, 10, or 13) will be captured and get the
+source address IP from them\&. Occasionally, because of the UDP port
+is open, a service will respond a UDP packet instead of a ICMP error
+message, so the probe will be timed\-out and marked as \fB*\fP\&,
+because the proberoute program will increase the destination port by 1
+every hop, the host IP will display at the next hop\&.
+.IP \fB\-\-icmp\fP
+Send the ICMP Echo probe packets, wait for the ICMP Time Exceeded
+error or ICMP Echo Reply message\&.
+.RE
 .TP \w'names'u+4
 .B \-A, \-\-all
 Same as '--tcp --udp --icmp'\&.
@@ -219,13 +250,15 @@ established, the proberoute program will send the out\-of\-sequence
 probe packet with specific length and TCP flags (usually with
 \fB\-\-ack\fP flag), for preventing processing by the destination
 host\&.
-.sp
+.PP
+.RS \w'names'u+4
 Because of using
 .B connect(2)
 call will make the tcp session full opening, not recommended for
 normal use, because a destination application is always affected (and
 can be confused)\&. For the same reason, if the destination is in the
 same subnet (ttl = 1), Proberoute never call \fBconnect(2)\fP\&.
+.RE
 .TP \w'names'u+4
 .B \-\-syn\fR/\fPack\fR/\fPpush\fR/\fPnull\fR/\fPfin\fR/\fPxmas
 Use TCP SYN, ACK, PUSH, Null, FIN and Xmas probes with \fB\-\-tcp\fP
