@@ -44,7 +44,7 @@ man: $(PROGS)_man.pdf
 $(PROGS)_man.pdf: $(PROGS).1
 	$(if $(filter AIX,$(OS)),\
 	troff -man -Tpsc <$< | psc >$(PROGS).ps,\
-	nroff -man -Tps <$< | psc >$(PROGS).ps)
+	groff -man -Tps <$< >$(PROGS).ps)
 	ps2pdf $(PROGS).ps $@
 
 clean:
