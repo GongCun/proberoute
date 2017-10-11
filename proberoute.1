@@ -473,6 +473,11 @@ Reverse	DNS lookups (PTR)
 Autonomous System (AS) path lookups
 .IP *
 Sending several probes concurrently
+.IP *
+Only support link type of loopback, IEEE 802\&.3 (RFC 1042) or
+Ethernet (RFC 894), SLIP (RFC 1144), and PPP (RFC 1161/1162)\&. Other
+link types such as IEEE 802.5 Token Ring, PPPoE, Cisco PPP with HDLC
+framing, etc\&. are not supported\&.
 .PD
 .PP
 If you found any bug, please report it to Cun Gong
