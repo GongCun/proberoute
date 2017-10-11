@@ -218,9 +218,11 @@ private:
         struct sockaddr *addr;          // primary address
         struct sockaddr *brdaddr;       // broadcast address
         struct sockaddr *netmask;	// netmask address
+        struct sockaddr *dstaddr;	// point-to-point destination address
         struct deviceInfo *next;        // next of these structures
         deviceInfo(): name(""), mtu(0), flags(0),
                       addr(NULL), brdaddr(NULL), netmask(NULL),
+		      dstaddr(NULL),
                       next(NULL) {}
 	~deviceInfo() {
 	    safeFree(addr); safeFree(brdaddr); safeFree(netmask);

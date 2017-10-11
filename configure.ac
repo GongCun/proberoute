@@ -19,7 +19,7 @@ dnl AC_SEARCH_LIBS(pcap_close, pcap)
 
 # Checks for header files.
 AC_CHECK_HEADERS([arpa/inet.h fcntl.h netdb.h netinet/in.h stdlib.h strings.h sys/ioctl.h \
-sys/socket.h sys/time.h unistd.h net/if_dl.h linux/netlink.h linux/rtnetlink.h])
+sys/socket.h sys/time.h unistd.h net/if_dl.h asm/types.h linux/netlink.h linux/rtnetlink.h])
 
 # Checks for typedefs, structures, and compiler characteristics.
 ##AC_CHECK_HEADER_STDBOOL
@@ -52,9 +52,9 @@ AC_DEFINE([HAVE_RT_MSGHDR_STRUCT], [1], [Define to 1 if <net/route.h> defines st
 AC_CHECK_TYPE([struct rtmsg],
 AC_DEFINE([HAVE_RTMSG_STRUCT], [1], [Define to 1 if <linux/rtnetlink.h> defines struct rtmsg]),,[
 #include <asm/types.h>
+#include <sys/socket.h>
 #include <linux/netlink.h>
 #include <linux/rtnetlink.h>
-#include <sys/socket.h>
 ])
 
 

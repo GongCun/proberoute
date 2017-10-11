@@ -115,6 +115,17 @@ void ProbeAddressInfo::getDeviceInfo() throw(ProbeException)
 	}
 #endif
 
+#ifdef SIOCGIFDSTADDR
+	if (flags & IFF_POINTOPOINT) {
+	    if (ioctl(sockfd, SIOCGIFDSTADDR, &ifrcopy) < 0)
+		throw ProbeException("ioctl SIOCGIFDSTADDR");
+	    sinptr = (struct sockaddr_in *)&ifrcopy.ifr_dstaddr;
+	    deviceInfoPtr->dstaddr = (struct sockaddr *)calloc(1, sizeof(struct sockaddr_in));
+	    if (!deviceInfoPtr->dstaddr) throw ProbeException("calloc");
+	    memcpy(deviceInfoPtr->dstaddr, sinptr, sizeof(struct sockaddr_in));
+	}
+#endif
+
 #ifdef SIOCGIFNETMASK
 	if (ioctl(sockfd, SIOCGIFNETMASK, &ifrcopy) < 0)
 	    throw ProbeException("ioctl SIOCGIFNETMASK");
@@ -135,8 +146,10 @@ void ProbeAddressInfo::deviceInfo::print()
 
     std::cout << name << ": ";
 
-    sinptr = (struct sockaddr_in *)addr;
-    std::cout << "inet " << inet_ntoa(sinptr->sin_addr) << ' ';
+    if (addr) {
+	sinptr = (struct sockaddr_in *)addr;
+	std::cout << "inet " << inet_ntoa(sinptr->sin_addr) << ' ';
+    }
 
     if (netmask) {
         sinptr = (struct sockaddr_in *)netmask;
@@ -146,6 +159,11 @@ void ProbeAddressInfo::deviceInfo::print()
     if (brdaddr) {
         sinptr = (struct sockaddr_in *)brdaddr;
         std::cout << "broadcast " << inet_ntoa(sinptr->sin_addr) << ' ';
+    }
+
+    if (dstaddr) {
+	sinptr = (struct sockaddr_in *)dstaddr;
+	std::cout << "dstaddr " << inet_ntoa(sinptr->sin_addr) << ' ';
     }
 
     std::cout << "mtu " << mtu << std::endl;
@@ -279,33 +297,52 @@ ProbeAddressInfo::ProbeAddressInfo(const char *foreignHost, const char *foreignS
     if (verbose > 2) p->print();  // the iface address maybe different from
                                   // specified source address
 
-    // Determine whether the remote host and local host are in the
-    // same LAN
-    const uint32_t vlan = *((uint32_t *)&((struct sockaddr_in *)p->addr)->sin_addr) &
-                          *((uint32_t *)&((struct sockaddr_in *)p->netmask)->sin_addr);
+    // Compare the destination address with netmask and broadcast
+    // address to determine whether the remote host and local host are
+    // in the same subnet. _CAN'T_ use this method since the
+    // point-to-point protocol have _NO_ broadcast address.
+    if (p->addr && p->brdaddr && p->netmask) {
+	
+	const uint32_t vlan = *((uint32_t *)&((struct sockaddr_in *)p->addr)->sin_addr) &
+			      *((uint32_t *)&((struct sockaddr_in *)p->netmask)->sin_addr);
 
-    char strdst[INET_ADDRSTRLEN], strbrd[INET_ADDRSTRLEN], strvlan[INET_ADDRSTRLEN];
+	char strdst[INET_ADDRSTRLEN], strbrd[INET_ADDRSTRLEN], strvlan[INET_ADDRSTRLEN];
 
-    inet_ntop(AF_INET, (struct in_addr *)&vlan, strvlan, sizeof(strvlan));
+	if (!inet_ntop(AF_INET, (struct in_addr *)&vlan,
+		       strvlan, sizeof(strvlan)))
+	    throw ProbeException("inet_ntop vlan");
 
-    inet_ntop(AF_INET, &((struct sockaddr_in *)p->brdaddr)->sin_addr,
-              strbrd, sizeof(strbrd));
+	if (!inet_ntop(AF_INET, &((struct sockaddr_in *)p->brdaddr)->sin_addr,
+		       strbrd, sizeof(strbrd)))
+	    throw ProbeException("inet_ntop brdaddr");
 
-    inet_ntop(AF_INET, &((struct sockaddr_in *)&foreignAddr)->sin_addr,
-              strdst, sizeof(strdst));
+	if (!inet_ntop(AF_INET, &((struct sockaddr_in *)&foreignAddr)->sin_addr,
+		       strdst, sizeof(strdst)))
+	    throw ProbeException("inet_ntop foreignAddr");
 
-    if (verbose > 2)
-        std::cerr << "strlan: " << strvlan << " "
-                  << "strbrd: " << strbrd << " "
-                  << "strdst: " << strdst << std::endl;
+	if (verbose > 2)
+	    std::cerr << "strlan: " << strvlan << " "
+		      << "strbrd: " << strbrd << " "
+		      << "strdst: " << strdst << std::endl;
 
-    if (!(strcmp(strdst, strvlan) >= 0 &&
-          strcmp(strdst, strbrd) <= 0))
-        sameLan = false;
+	if (!(strcmp(strdst, strvlan) >= 0 &&
+	      strcmp(strdst, strbrd) <= 0))
+	    sameLan = false;
+    }
 
     // Check the gateway again strictly
     if (!strcmp(strGateway, "AF_LINK"))
         sameLan = true;
+
+    // Check the Point-to-Point destination address again (Type AF_LINK)
+    if (p->addr && p->dstaddr && p->netmask) {
+	const uint32_t svlan = *((uint32_t *)&((struct sockaddr_in *)p->addr)->sin_addr) &
+			       *((uint32_t *)&((struct sockaddr_in *)p->netmask)->sin_addr);
+	const uint32_t dvlan = *((uint32_t *)&((struct sockaddr_in *)&foreignAddr)->sin_addr) &
+			       *((uint32_t *)&((struct sockaddr_in *)p->netmask)->sin_addr);
+
+	sameLan = (svlan == dvlan) ? true : false;
+    }
 
     freeDeviceInfo();
 }

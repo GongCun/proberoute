@@ -37,11 +37,19 @@ ProbePcap::ProbePcap(const char *dev,
 	throw ProbeException("pcap_datalink", pcap_geterr(handle));
 
     switch (linkType) {
-    case 0:			// loopback header is 4 bytes
-	ethLen = 4;
+    case 0:			  // DLT_NULL
+	ethLen = 4;		  // loopback header is 4 bytes
 	break;
-    case 1:
-	ethLen = 14;		// IEEE 802.3 (RFC 1042) or Standard Ethernet (RFC 894)
+    case 1:			  // DLT_EN10MB
+	ethLen = 14;		  // IEEE 802.3 (RFC 1042) or Standard Ethernet (RFC 894)
+	break;
+    case 8:			  // DLT_SLIP	
+	ethLen = 16;		  // SLIP header = 16 bytes; see:
+                                  // http://www.tcpdump.org/linktypes/LINKTYPE_SLIP.html
+	break;
+    case 9:			  // DLT_PPP
+	ethLen = 0;		  // PPP header length is variable: TCP/IP Illustrated
+                                  // Vol.1 Chapter 2.6 PPP: Point-to-Point Protocol
 	break;
     default:
 	msg << "unsupport datalink (" << linkType << ")";
@@ -70,7 +78,7 @@ static void sig_alrm(int signo) throw(ProbeException)
 
 const u_char *ProbePcap::nextPcap(int *len)
 {
-    const u_char *ptr;
+    const u_char *ptr, *p;
     struct pcap_pkthdr hdr;
 
     if (signal(SIGALRM, sig_alrm) == SIG_ERR)
@@ -78,7 +86,28 @@ const u_char *ProbePcap::nextPcap(int *len)
 
     while ((ptr = pcap_next(handle, &hdr)) == NULL) ;
 
-    *len = hdr.caplen;
+    // Point-to-Point Protocol
+    p = ptr;
+    if (linkType == 9 && ethLen == 0) {
+        // PPP in HDLC-like framing.
+	if (*ptr == 0xff && *(ptr + 1) == 0x03)
+	    ethLen = 4, p += 2;
+        // Just PPP header (protocol) without framing.
+	else
+	    ethLen = 2;
+
+        // Check if it's IPv4 datagram:
+        //   IP: 0x0021
+        //   Link control data: 0xC021
+        //   Network control data: 0x8021
+	if (!(*p == 0x00 && *(p + 1) == 0x21)) {
+	    std::fprintf(stderr, "Unknown PPP Protocol: 0x%02x%02x\n",
+			 *(ptr + 2), *(ptr + 3));
+	    exit(1);
+	}
+    }
+
+    *len = hdr.caplen - ethLen;
 
     return ptr + ethLen;
 }
