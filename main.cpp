@@ -16,6 +16,7 @@ const char *host, *service, *srcip;
 u_char tcpFlags = TH_SYN;
 u_char icmpFlags = ICMP_ECHO;
 std::vector<int> protoVec;
+std::string captureFunc = "unknown capture";
 
 int connfd = -1;
 int origttl;
@@ -23,7 +24,6 @@ static void Close();
 
 u_char tcpopt[TCP_OPT_LEN], ipopt[IP_OPT_LEN];
 u_char *optptr;
-
 
 #define printOpt(x) std::cout << #x": " << x << std::endl
 #define printOptStr(x) std::cout << #x": " << nullToEmpty(x) << std::endl
@@ -120,7 +120,6 @@ int main(int argc, char *argv[])
 
     std::vector<ProbeSock *> probeVec;
     std::vector<ProbeSock *>::iterator probe;
-
 
     // make std::cout and stdout unbuffered
     std::cout.setf(std::ios::unitbuf);
@@ -576,6 +575,8 @@ default:
 		for ( ; ; ) {
 		    ptr = capture->nextPcap(&caplen);
 		    assert(ptr != NULL);
+		    // std::cerr << "!! caplen = " << caplen << std::endl;
+		    
                     for (probe = probeVec.begin(); probe != probeVec.end(); ++probe) {
                         
                         if (code = (*probe)->recvIcmp(ptr, caplen)) {
@@ -725,10 +726,11 @@ default:
 
                 if (!s.empty()) s.insert(0, "  ");
                 if (!msg.empty()) msg += " ";
-		std::printf("%s  %s%.3f ms", s.c_str(),
-                            (verbose > 2) ? msg.c_str() : "",
-                            rtt);
+                captureFunc.insert(0, "by "), captureFunc += " ";
 
+                std::printf("%s  %s%s%.3f ms", s.c_str(),
+                            (verbose > 2) ? msg.c_str() : "",
+                            (verbose > 3) ? captureFunc.c_str() : "", rtt);
 	    }
 	    std::cout << std::endl;
 

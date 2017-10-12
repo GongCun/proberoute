@@ -110,6 +110,7 @@ extern u_char icmpFlags;
 extern u_char tcpopt[TCP_OPT_LEN], ipopt[IP_OPT_LEN];
 extern u_char *optptr;
 extern std::vector<int> protoVec;
+extern std::string captureFunc;
 
 inline int Rand()
 {
@@ -317,6 +318,12 @@ inline std::ostream& operator<<(std::ostream &output,
     output << (address.sameLan ? "in the same lan" : "not in the same lan");
 
     return output;
+}
+
+extern "C" {
+    // thread functions for capture the packets
+    void *recvPkt(void *);
+    void *captPkt(void *);
 }
 
 class ProbePcap {

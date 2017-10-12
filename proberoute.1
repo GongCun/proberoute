@@ -466,19 +466,24 @@ participate in the development and help to improve Proberoute\&.
 The following is a list of those features not yet implemented:
 .PD 0
 .IP *
-IPv6 supporting
+IPv6 supporting\&.
 .IP *
-Reverse	DNS lookups (PTR)
+Reverse	DNS lookups (PTR)\&.
 .IP *
-Autonomous System (AS) path lookups
+Autonomous System (AS) path lookups\&.
 .IP *
-Sending several probes concurrently
-.IP *
-Only support link type of loopback, IEEE 802\&.3 (RFC 1042) or
-Ethernet (RFC 894), SLIP (RFC 1144), and PPP (RFC 1161/1162)\&. Other
-link types such as IEEE 802.5 Token Ring, PPPoE, Cisco PPP with HDLC
-framing, etc\&. are not supported\&.
+Sending several probes concurrently\&.
 .PD
+.PP
+Since I have no environment to test these link types such as IEEE
+802.11 wireless LAN, PPPoE, SLIP, or Cisco PPP with HDLC framing,
+etc\&., so there may be BUGs hidden in them\&.
+.PP
+Because of IPsec with Authentication Header (AH) or Encapsulating
+Security Payload (ESP) can not be captured by \fBlibpcap\fP,
+Proberoute implements the \fBrecvfrom(2)\fP for capturing the ICMP Raw
+Socket to work around it, use \fB\-vvvv\fP flags can watch which
+capture catch the packet\&.
 .PP
 If you found any bug, please report it to Cun Gong
 <gong_cun@bocmacau.com>, thank you very much\&.

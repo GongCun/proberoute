@@ -1,4 +1,7 @@
 #include "ProbeRoute.hpp"
+#include <pthread.h>
+#include <errno.h>
+#include <assert.h>
 
 ProbePcap::ProbePcap(const char *dev,
 		     const char *cmd =
@@ -51,6 +54,23 @@ ProbePcap::ProbePcap(const char *dev,
 	ethLen = 0;		  // PPP header length is variable: TCP/IP Illustrated
                                   // Vol.1 Chapter 2.6 PPP: Point-to-Point Protocol
 	break;
+    case 50:			  // DLT_PPP_SERIAL: PPP in HDLC-like framing as per RFC
+				  // 1162, or Cisco PPP with HDLC framing, as per section
+				  // 4.3.1 of RFC 1547.
+    case 104:			  // DLT_C_HDLC: Cisco PPP with HDLC framing.
+	ethLen = 4;
+	break;
+
+    case 51:			  // DLT_PPP_ETHER: PPPoE, the packet begins with a PPPoE
+				  // header, as per RFC 2516.
+	ethLen = 14 + 6;	  // Ethernet frame (14-byte) add PPPoE header (6-byte),
+				  // _JUST_ PPP session stage.
+	break;
+
+    case 105:			  // DLT_IEEE802_11: IEEE 802.11 wireless LAN.
+	ethLen = 30;		  // from http://www.rhyshaden.com/wireless.htm
+	break;
+	
     default:
 	msg << "unsupport datalink (" << linkType << ")";
 	throw ProbeException(msg.str());
@@ -76,6 +96,209 @@ static void sig_alrm(int signo) throw(ProbeException)
 #endif
 }
 
+// Get double capture (ICMP Raw Socket or Pcap_XXX) by using multithread
+enum CapType { WAIT = 999, PCAP = 1, RECV = 2 };
+static CapType done = WAIT;
+static pthread_cond_t cond;
+static pthread_mutex_t mutex;
+static int recvfd = -1;
+static u_char recvbuf[MAX_MTU];
+
+struct argPcap 
+{
+    int *len;
+    const u_char **ptr;
+    pcap_t *handle;
+    int linkType;
+    int *ethLen;
+};
+
+static void errExit(const char *str, int err)
+{
+    std::fprintf(stderr, "%s: %s\n", str, strerror(err));
+    exit(1);
+}
+
+
+void *recvPkt(void *arg)
+{
+    struct argPcap *argPcap = (struct argPcap *)arg;
+    struct sockaddr addr;
+    socklen_t addrlen = sizeof(addr);
+    int n;
+    int err;
+
+    // struct timeval tv;
+    // tv.tv_sec = 1, tv.tv_usec = 0;
+    // select(0, NULL, NULL, NULL, &tv);
+    
+    n = recvfrom(recvfd, recvbuf, sizeof(recvbuf), 0, &addr, &addrlen);
+
+    if (err = pthread_mutex_lock(&mutex))
+        errExit("pthread_mutex_lock recvPkt()", err);
+    
+    if (done == WAIT) {
+        *argPcap->len = n;
+        *argPcap->ptr = recvbuf;
+        done = RECV;		  // recvfrom() succeed
+    }
+
+    // Nothing to do if have done by captPkt().
+
+    if (err = pthread_mutex_unlock(&mutex))
+        errExit("pthread_mutex_unlock recvPkt()", err);
+
+    // We could have reversed these two steps of unlock() and
+    // signal(); SUSv3 permits them to be done in either order.
+    if (err = pthread_cond_signal(&cond))
+	errExit("pthread_cond_signal from recvPkt", err);
+
+    return NULL;
+}
+
+void *captPkt(void *arg)
+{
+    struct argPcap *argPcap = (struct argPcap *)arg;
+    const static u_char *ptr, *p;
+    struct pcap_pkthdr hdr;
+    int err;
+    pcap_t *handle = argPcap->handle;
+    int linkType = argPcap->linkType;
+    int *ethLen = argPcap->ethLen;
+
+    // struct timeval tv;
+    // tv.tv_sec = 1, tv.tv_usec = 0;
+    // select(0, NULL, NULL, NULL, &tv);
+
+    while ((ptr = pcap_next(handle, &hdr)) == NULL) ;
+
+    if (err = pthread_mutex_lock(&mutex))
+        errExit("pthread_mutex_lock captPkt()", err);
+    
+    if (done == WAIT) {
+        // Point-to-Point Protocol
+        if (linkType == 9 && *ethLen == 0) {
+            // PPP in HDLC-like framing.
+            if (*ptr == 0xff && *(ptr + 1) == 0x03)
+                *ethLen = 4, p = ptr + 2;
+            // Just PPP header (protocol) without framing.
+            else
+                *ethLen = 2, p = ptr;
+
+            // Check if it's IPv4 datagram:
+            //   IP: 0x0021
+            //   Link control data: 0xC021
+            //   Network control data: 0x8021
+            if (!(*p == 0x00 && *(p + 1) == 0x21)) {
+                std::fprintf(stderr, "Unknown PPP Protocol: 0x%02x%02x\n",
+                             *(ptr + 2), *(ptr + 3));
+                exit(1);
+            }
+        }
+
+        *argPcap->len = hdr.caplen - *ethLen;
+        *argPcap->ptr = ptr + (*ethLen);
+        done = PCAP;		  // pcap_xxx capture succeed
+    }
+
+    // Nothing to do if have done by recvPkt().
+
+    if (err = pthread_mutex_unlock(&mutex))
+        errExit("pthread_mutex_unlock captPkt()", err);
+
+    if (err = pthread_cond_signal(&cond))
+	errExit("pthread_cond_signal from captPkt", err);
+
+    return NULL;
+}
+
+const u_char *ProbePcap::nextPcap(int *len)
+{
+    static const u_char *ptr;
+    pthread_t tid1, tid2;
+    int err;
+    static struct argPcap *argPcap = NULL;
+
+    if (recvfd < 0 &&
+	(recvfd = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP)) < 0) {
+	errExit("socket recvfd", errno);
+    }
+
+    if (signal(SIGALRM, sig_alrm) == SIG_ERR)
+	throw ProbeException("signal error");
+
+    static pthread_mutex_t _mutex = PTHREAD_MUTEX_INITIALIZER;
+    static pthread_cond_t _cond = PTHREAD_COND_INITIALIZER;
+    mutex = _mutex;
+    cond = _cond;
+    // if (err = pthread_mutex_init(&mutex, NULL)) {
+	// errExit("pthread_mutex_init", err);
+    // }
+
+    // if (err = pthread_cond_init(&cond, NULL)) {
+	// errExit("pthread_cond_init", err);
+    // }
+
+    if (argPcap == NULL &&
+	(argPcap = (struct argPcap *)calloc(1, sizeof(struct argPcap))) == NULL) {
+	errExit("calloc argPcap", errno);
+    }
+
+    argPcap->len = len, argPcap->ptr = &ptr;
+    argPcap->handle = handle, argPcap->linkType = linkType, argPcap->ethLen = &ethLen;
+    
+    if (err = pthread_create(&tid1, NULL, captPkt, (void *)argPcap)) {
+	errExit("pthread_create captPkt", err);
+    }
+
+    if (err = pthread_create(&tid2, NULL, recvPkt, (void *)argPcap)) {
+	errExit("pthread_create recvPkt", err);
+    }
+
+    // _DON'T_ join the thread, otherwise will be block until the specified
+    // thread terminated
+
+    for (;;) {
+        if (err = pthread_mutex_lock(&mutex))
+            errExit("pthread_mutex_lock nextPcap()", err);
+    
+        while (done == WAIT)
+            pthread_cond_wait(&cond, &mutex);
+    
+        captureFunc = (done == PCAP) ? "pcap()" :
+                      (done == RECV) ? "recv()" : "unknown capture";
+        
+        /*
+        std::cerr << "In nextPcap() captured " << *len << " bytes by "
+                  << (done == PCAP ? "pcap()" : "recv()")
+                  << std::endl;
+        */
+        done = WAIT;
+        if (*len > 0) {
+            pthread_cancel(tid1);
+            pthread_cancel(tid2);
+            if (err = pthread_mutex_unlock(&mutex))
+                errExit("pthread_mutex_unlock nextPcap()", err);
+            break;
+        }
+        else
+            errExit("capture error", errno);
+    }
+    
+
+    // clean up and return
+    // if (err = pthread_mutex_destroy(&mutex)) {
+	// errExit("pthread_mutex_destroy", err);
+    // }
+    // if (err = pthread_cond_destroy(&cond)) {
+	// errExit("pthread_cond_destroy", err);
+    // }
+
+    assert(ptr);
+    return ptr;
+}
+
+#if 0
 const u_char *ProbePcap::nextPcap(int *len)
 {
     const u_char *ptr, *p;
@@ -87,14 +310,13 @@ const u_char *ProbePcap::nextPcap(int *len)
     while ((ptr = pcap_next(handle, &hdr)) == NULL) ;
 
     // Point-to-Point Protocol
-    p = ptr;
     if (linkType == 9 && ethLen == 0) {
         // PPP in HDLC-like framing.
 	if (*ptr == 0xff && *(ptr + 1) == 0x03)
-	    ethLen = 4, p += 2;
+	    ethLen = 4, p = ptr + 2;
         // Just PPP header (protocol) without framing.
 	else
-	    ethLen = 2;
+	    ethLen = 2, p = ptr;
 
         // Check if it's IPv4 datagram:
         //   IP: 0x0021
@@ -111,3 +333,4 @@ const u_char *ProbePcap::nextPcap(int *len)
 
     return ptr + ethLen;
 }
+#endif
