@@ -19,7 +19,7 @@ dnl AC_SEARCH_LIBS(pcap_close, pcap)
 
 # Checks for header files.
 AC_CHECK_HEADERS([arpa/inet.h fcntl.h netdb.h netinet/in.h stdlib.h strings.h sys/ioctl.h \
-sys/socket.h sys/time.h unistd.h net/if_dl.h asm/types.h linux/netlink.h linux/rtnetlink.h])
+sys/socket.h sys/time.h unistd.h net/if_dl.h asm/types.h])
 
 # Checks for typedefs, structures, and compiler characteristics.
 ##AC_CHECK_HEADER_STDBOOL

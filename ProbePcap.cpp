@@ -103,11 +103,11 @@ static pthread_cond_t cond;
 static pthread_mutex_t mutex;
 static int recvfd = -1;
 static u_char recvbuf[MAX_MTU];
+static int *Len;
+static const u_char *Ptr;
 
 struct argPcap 
 {
-    int *len;
-    const u_char **ptr;
     pcap_t *handle;
     int linkType;
     int *ethLen;
@@ -122,7 +122,7 @@ static void errExit(const char *str, int err)
 
 void *recvPkt(void *arg)
 {
-    struct argPcap *argPcap = (struct argPcap *)arg;
+    // struct argPcap *argPcap = (struct argPcap *)arg;
     struct sockaddr addr;
     socklen_t addrlen = sizeof(addr);
     int n;
@@ -138,8 +138,8 @@ void *recvPkt(void *arg)
         errExit("pthread_mutex_lock recvPkt()", err);
     
     if (done == WAIT) {
-        *argPcap->len = n;
-        *argPcap->ptr = recvbuf;
+        *Len = n;
+        Ptr = recvbuf;
         done = RECV;		  // recvfrom() succeed
     }
 
@@ -159,7 +159,7 @@ void *recvPkt(void *arg)
 void *captPkt(void *arg)
 {
     struct argPcap *argPcap = (struct argPcap *)arg;
-    const static u_char *ptr, *p;
+    static const u_char *ptr, *p;
     struct pcap_pkthdr hdr;
     int err;
     pcap_t *handle = argPcap->handle;
@@ -196,8 +196,8 @@ void *captPkt(void *arg)
             }
         }
 
-        *argPcap->len = hdr.caplen - *ethLen;
-        *argPcap->ptr = ptr + (*ethLen);
+        *Len = hdr.caplen - *ethLen;
+        Ptr = ptr + (*ethLen);
         done = PCAP;		  // pcap_xxx capture succeed
     }
 
@@ -214,7 +214,7 @@ void *captPkt(void *arg)
 
 const u_char *ProbePcap::nextPcap(int *len)
 {
-    static const u_char *ptr;
+    // static const u_char *ptr;
     pthread_t tid1, tid2;
     int err;
     static struct argPcap *argPcap = NULL;
@@ -231,6 +231,7 @@ const u_char *ProbePcap::nextPcap(int *len)
     static pthread_cond_t _cond = PTHREAD_COND_INITIALIZER;
     mutex = _mutex;
     cond = _cond;
+    Len = len;
     // if (err = pthread_mutex_init(&mutex, NULL)) {
 	// errExit("pthread_mutex_init", err);
     // }
@@ -244,14 +245,16 @@ const u_char *ProbePcap::nextPcap(int *len)
 	errExit("calloc argPcap", errno);
     }
 
-    argPcap->len = len, argPcap->ptr = &ptr;
+    // argPcap->len = len, argPcap->ptr = &ptr;
     argPcap->handle = handle, argPcap->linkType = linkType, argPcap->ethLen = &ethLen;
     
+    // Make sure that all passed data is thread safe - that it can not
+    // be changed by other threads.
     if (err = pthread_create(&tid1, NULL, captPkt, (void *)argPcap)) {
 	errExit("pthread_create captPkt", err);
     }
 
-    if (err = pthread_create(&tid2, NULL, recvPkt, (void *)argPcap)) {
+    if (err = pthread_create(&tid2, NULL, recvPkt, NULL)) {
 	errExit("pthread_create recvPkt", err);
     }
 
@@ -294,8 +297,8 @@ const u_char *ProbePcap::nextPcap(int *len)
 	// errExit("pthread_cond_destroy", err);
     // }
 
-    assert(ptr);
-    return ptr;
+    assert(Ptr);
+    return Ptr;
 }
 
 #if 0
