@@ -20,7 +20,7 @@ ProbePcap::ProbePcap(const char *dev,
 #ifdef _CYGWIN
     pcap_if_t *alldevs;
     pcap_if_t *d;
-    if (pcap_findalldevs_ex(PCAP_SRC_IF_STRING, NULL, &alldevs, errbuf) == -1) {
+    if (pcap_findalldevs_ex((char *)PCAP_SRC_IF_STRING, NULL, &alldevs, errbuf) == -1) {
         throw ProbeException("pcap_findalldevs_ex", errbuf);
     }
     for (d = alldevs; d; d = d->next) {
@@ -56,13 +56,13 @@ ProbePcap::ProbePcap(const char *dev,
 
 #ifdef _CYGWIN
     // std::cerr << "CYGWIN Netmask\n";
-    if (d->addresses) {
-        // Retrieve the mask of the first address of the interface
-        std::fprintf(stderr, "netmask is %s\n", inet_ntoa(((struct sockaddr_in *)(d->addresses->netmask))->sin_addr));
+    // if (d->addresses) {
+    //     // Retrieve the mask of the first address of the interface
+    //     std::fprintf(stderr, "netmask is %s\n", inet_ntoa(((struct sockaddr_in *)(d->addresses->netmask))->sin_addr));
         
-        netmask = (bpf_u_int32)((struct sockaddr_in *)(d->addresses->netmask))->sin_addr.s_addr;
-    }
-    else
+    //     netmask = (bpf_u_int32)((struct sockaddr_in *)(d->addresses->netmask))->sin_addr.s_addr;
+    // }
+    // else
         netmask = 0xffffff;        // suppose to be in a C class network
 #else
     if (pcap_lookupnet(dev, &localnet, &netmask, errbuf) < 0)
@@ -203,7 +203,7 @@ void *captPkt(void *arg)
 {
     struct argPcap *argPcap = (struct argPcap *)arg;
     static const u_char *ptr, *p;
-    struct pcap_pkthdr hdr;
+    static struct pcap_pkthdr hdr;
     int err;
     pcap_t *handle = argPcap->handle;
     int linkType = argPcap->linkType;
@@ -239,6 +239,8 @@ void *captPkt(void *arg)
             }
         }
 
+        fprintf(stderr, "caplen = X %d X, ethLen = %d\n", hdr.caplen, *ethLen);
+
         *Len = hdr.caplen - *ethLen;
         Ptr = ptr + (*ethLen);
         done = PCAP;		  // pcap_xxx capture succeed
@@ -258,7 +260,8 @@ void *captPkt(void *arg)
 const u_char *ProbePcap::nextPcap(int *len)
 {
     // static const u_char *ptr;
-    pthread_t tid1, tid2;
+    pthread_t tid1;
+    pthread_t tid2;
     int err;
     static struct argPcap *argPcap = NULL;
 
