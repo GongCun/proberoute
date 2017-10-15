@@ -203,7 +203,11 @@ void *captPkt(void *arg)
 {
     struct argPcap *argPcap = (struct argPcap *)arg;
     static const u_char *ptr, *p;
+#ifdef _CYGWIN
+    static struct pcap_pkthdr *hdr;
+#else
     static struct pcap_pkthdr hdr;
+#endif
     int err;
     pcap_t *handle = argPcap->handle;
     int linkType = argPcap->linkType;
@@ -213,7 +217,11 @@ void *captPkt(void *arg)
     // tv.tv_sec = 1, tv.tv_usec = 0;
     // select(0, NULL, NULL, NULL, &tv);
 
+#ifdef _CYGWIN
+    while (pcap_next_ex(handle, &hdr, &ptr) <= 0) ;
+#else
     while ((ptr = pcap_next(handle, &hdr)) == NULL) ;
+#endif
 
     if (err = pthread_mutex_lock(&mutex))
         errExit("pthread_mutex_lock captPkt()", err);
@@ -239,9 +247,13 @@ void *captPkt(void *arg)
             }
         }
 
-        fprintf(stderr, "caplen = X %d X, ethLen = %d\n", hdr.caplen, *ethLen);
-
+#ifdef _CYGWIN
+        fprintf(stderr, "caplen = %d, ethLen = %d\n", hdr->caplen, *ethLen);
+        *Len = hdr->caplen - *ethLen;
+#else
         *Len = hdr.caplen - *ethLen;
+#endif
+
         Ptr = ptr + (*ethLen);
         done = PCAP;		  // pcap_xxx capture succeed
     }
@@ -335,8 +347,11 @@ const u_char *ProbePcap::nextPcap(int *len)
             std::printf("len = %d by %s\n", *len, 
                         (savedone == PCAP) ? "pcap()" :
                         (savedone == RECV) ? "recv()" : "unknown captured");
+
+            if (err = pthread_mutex_unlock(&mutex))
+                errExit("pthread_mutex_unlock nextPcap()", err);
             
-            errExit("capture error", errno);
+            // errExit("capture error", errno);
         }
         
     }

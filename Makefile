@@ -28,7 +28,7 @@ proberoute: $(OBJS)
 
 usage.h: usage.txt
 	@echo 'P("proberoute  version $(VERSION) build on $(OS) at '`date`'");' >$@
-	sed <$< >>$@ -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/.*/P("&");/'
+	sed <$< -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/.*/P("&");/' | tr -d '\r' >>$@ 
 
 install: $(PROGS) $(PROGS).1
 	@echo copy $(PROGS) to ${DESTDIR}$(BINDIR)

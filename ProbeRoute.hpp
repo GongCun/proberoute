@@ -58,7 +58,7 @@
 
 #include <setjmp.h>
 #include <signal.h>
-#include <strings.h>		// bzero()
+#include <strings.h>		 // bzero()
 #include <assert.h>
 
 #if defined _LINUX || defined _CYGWIN
@@ -67,12 +67,16 @@
 #include <iostream>
 #include <sstream>
 #include <string>
-#include <cstring>		// memset(), strcmp(), ...
+#include <cstring>		 // memset(), strcmp(), ...
 #include <stdexcept>
 #include <algorithm>
 #include <vector>
 
+#ifdef _CYGWIN
+#define CAP_LEN 65536            // from WinPcap example (Interpreting the packets)
+#else
 #define CAP_LEN 1514             // Maximum capture length
+#endif
 #define CAP_TIMEOUT 500          // Milliseconds; This timeout is used to arrange
                                  // that the read not necessarily return immediately
                                  // when a packet is seen. In some OS (such as AIX),

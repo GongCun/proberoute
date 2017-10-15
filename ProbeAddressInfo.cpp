@@ -49,7 +49,7 @@ void ProbeAddressInfo::getDeviceInfo() throw(ProbeException)
     for (ptr = buf; ptr < buf + ifc.ifc_len; ) {
 	ifr = (struct ifreq *)ptr;
 
-#ifdef _LINUX
+#if defined _LINUX || defined _CYGWIN
 	ptr += sizeof(*ifr);
 #else
 #ifdef HAVE_SOCKADDR_SA_LEN
@@ -96,6 +96,13 @@ void ProbeAddressInfo::getDeviceInfo() throw(ProbeException)
 #endif
 
         deviceInfoPtr->name = ifr->ifr_name;
+
+#ifdef _CYGWIN
+        deviceInfoPtr->name.insert(0, PCAP_SRC_IF_STRING "\\Device\\NPF_");
+#endif
+
+        // std::cerr << "ifr->ifr_name = " << ifr->ifr_name << std::endl;
+        // std::cerr << "deviceInfoPtr->name = " << deviceInfoPtr->name << std::endl;
 
 	assert(ifr->ifr_addr.sa_family == AF_INET);
 
@@ -272,8 +279,16 @@ ProbeAddressInfo::ProbeAddressInfo(const char *foreignHost, const char *foreignS
     // fetch the device name or mtu size by the IP address
     getDeviceInfo();
 
+    // std::cerr << "localAddr = " << inet_ntoa(((struct sockaddr_in *)&localAddr)->sin_addr) << std::endl;
+
     struct deviceInfo *p;
     for (p = deviceInfoList; p; p = p->next) {
+        // std::cerr << "p->name = " << p->name << std::endl;
+	// std::cerr << "p->addr = " <<
+	// inet_ntoa(
+            // ((struct sockaddr_in *)p->addr)->sin_addr
+        // ) << std::endl;
+
 	if (((struct sockaddr_in *)p->addr)->sin_addr.s_addr ==
 	    ((struct sockaddr_in *)&localAddr)->sin_addr.s_addr) {
 	    if (device.empty()) {
