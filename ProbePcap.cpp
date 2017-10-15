@@ -17,8 +17,35 @@ ProbePcap::ProbePcap(const char *dev,
     
     bzero(errbuf, sizeof(errbuf));
 
+#ifdef _CYGWIN
+    pcap_if_t *alldevs;
+    pcap_if_t *d;
+    if (pcap_findalldevs_ex(PCAP_SRC_IF_STRING, NULL, &alldevs, errbuf) == -1) {
+        throw ProbeException("pcap_findalldevs_ex", errbuf);
+    }
+    for (d = alldevs; d; d = d->next) {
+        if (strcmp(dev, d->name) == 0) {
+            std::cerr << "d->name = " << d->name << std::endl;
+            break;
+        }
+    }
+    if (!d) {
+        pcap_freealldevs(alldevs);
+        throw ProbeException("pcap_findalldevs_ex: can't find device");
+    }
+            
+    handle = pcap_open(
+        d->name,                   // name of the device
+        CAP_LEN,
+        PCAP_OPENFLAG_PROMISCUOUS, // promiscuous mode
+        CAP_TIMEOUT,
+        NULL,                      // remote authentication
+        errbuf);
+#else
     // specify promiscuous mode
     handle = pcap_open_live(dev, CAP_LEN, CAP_TIMEOUT, 1, errbuf);
+#endif
+
     if (handle == NULL)
 	throw ProbeException("pcap_open_live", errbuf);
 
@@ -27,10 +54,24 @@ ProbePcap::ProbePcap(const char *dev,
 
     bzero(errbuf, sizeof(errbuf));
 
+#ifdef _CYGWIN
+    // std::cerr << "CYGWIN Netmask\n";
+    if (d->addresses) {
+        // Retrieve the mask of the first address of the interface
+        std::fprintf(stderr, "netmask is %s\n", inet_ntoa(((struct sockaddr_in *)(d->addresses->netmask))->sin_addr));
+        
+        netmask = (bpf_u_int32)((struct sockaddr_in *)(d->addresses->netmask))->sin_addr.s_addr;
+    }
+    else
+        netmask = 0xffffff;        // suppose to be in a C class network
+#else
     if (pcap_lookupnet(dev, &localnet, &netmask, errbuf) < 0)
 	throw ProbeException("pcap_lookupnet", errbuf);
+#endif
 
-    if (pcap_compile(handle, &bpfCode, (char *)cmd, 0, netmask) < 0)
+    std::fprintf(stderr, "pcap() netmask = 0x%08x\n", netmask);
+
+    if (pcap_compile(handle, &bpfCode, (char *)cmd, 1, netmask) < 0)
 	throw ProbeException("pcap_compile", pcap_geterr(handle));
 
     if (pcap_setfilter(handle, &bpfCode) < 0)
@@ -75,6 +116,8 @@ ProbePcap::ProbePcap(const char *dev,
 	msg << "unsupport datalink (" << linkType << ")";
 	throw ProbeException(msg.str());
     }
+
+    pcap_freealldevs(alldevs);
 }
 
 ProbePcap* ProbePcap::_instance = NULL;
@@ -276,6 +319,7 @@ const u_char *ProbePcap::nextPcap(int *len)
                   << (done == PCAP ? "pcap()" : "recv()")
                   << std::endl;
         */
+        int savedone = done;
         done = WAIT;
         if (*len > 0) {
             pthread_cancel(tid1);
@@ -284,8 +328,14 @@ const u_char *ProbePcap::nextPcap(int *len)
                 errExit("pthread_mutex_unlock nextPcap()", err);
             break;
         }
-        else
+        else {
+            std::printf("len = %d by %s\n", *len, 
+                        (savedone == PCAP) ? "pcap()" :
+                        (savedone == RECV) ? "recv()" : "unknown captured");
+            
             errExit("capture error", errno);
+        }
+        
     }
     
 
