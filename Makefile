@@ -1,4 +1,5 @@
-OS = $(shell uname -s |tr '[:lower:]' '[:upper:]')
+OS = $(shell OS_=`uname -s |tr '[:lower:]' '[:upper:]'` && echo $${OS_%%_*})
+##$(info $$OS is [${OS}])
 CPPFLAGS += -D_$(OS)
 VERSION = 1.0
 BINDIR = /usr/local/bin
@@ -6,6 +7,8 @@ MANDIR = /usr/local/share/man/man1
 
 ifeq (AIX, $(OS))
 include Makefile.aix
+else ifeq (CYGWIN, $(OS))
+include Makefile.cygwin
 else
 include Makefile.gcc
 endif
@@ -18,7 +21,7 @@ PROGS = proberoute
 all: ${PROGS}
 
 proberoute: $(OBJS) 
-	${CC} ${CFLAGS} -o $@ $^ $(LIBS)
+	${CC} ${CFLAGS} -o $@ $^ $(LDFLAGS) $(LIBS)
 
 %.o: %.cpp ProbeRoute.hpp config.h usage.h
 	$(CC) $(CPPFLAGS) -c -o $@ $<
