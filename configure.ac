@@ -12,6 +12,8 @@ AC_PROG_CC([xlc++ c++])
 
 # Checks for libraries.
 ##AC_CHECK_LIB(pcap, pcap_open_live, [], [AC_MSG_ERROR([cannot find libwpcap])])
+AH_TEMPLATE([HAVE_LIBPCAP],
+[Undefine if do not have libpcap or libwpcap.])
 AC_CHECK_LIB(popt, poptGetContext, [], [AC_MSG_ERROR([cannot find libpopt])])
 AC_SEARCH_LIBS(pcap_open_live, pcap wpcap,
 [AC_DEFINE([HAVE_LIBPCAP], [1])],
@@ -22,7 +24,7 @@ dnl AC_SEARCH_LIBS(pcap_close, pcap)
 
 # Checks for header files.
 AC_CHECK_HEADERS([arpa/inet.h fcntl.h netdb.h netinet/in.h stdlib.h strings.h sys/ioctl.h \
-sys/socket.h sys/time.h unistd.h net/if_dl.h asm/types.h])
+sys/socket.h sys/time.h unistd.h net/if_dl.h asm/types.h netinet/ip.h netinet/tcp.h netinet/udp.h netinet/ip_icmp.h])
 
 # Checks for typedefs, structures, and compiler characteristics.
 ##AC_CHECK_HEADER_STDBOOL
@@ -37,6 +39,14 @@ AH_TEMPLATE([HAVE_RT_MSGHDR_STRUCT],
 [Undefine if do not have struct rt_msghdr.])
 AH_TEMPLATE([HAVE_RTMSG_STRUCT],
 [Undefine if do not have struct rtmsg.])
+AH_TEMPLATE([HAVE_IP_STRUCT],
+[Undefine if do not have struct ip.])
+AH_TEMPLATE([HAVE_TCPHDR_STRUCT],
+[Undefine if do not have struct tcphdr.])
+AH_TEMPLATE([HAVE_UDPHDR_STRUCT],
+[Undefine if do not have struct udphdr.])
+AH_TEMPLATE([HAVE_ICMP_STRUCT],
+[Undefine if do not have struct icmp.])
 
 AC_CHECK_TYPE([struct sockaddr_dl],
 AC_DEFINE(HAVE_SOCKADDR_DL_STRUCT, 1, Define to 1 if <net/if_dl.h> defines struct sockaddr_dl),,[
@@ -59,6 +69,35 @@ AC_DEFINE([HAVE_RTMSG_STRUCT], [1], [Define to 1 if <linux/rtnetlink.h> defines 
 #include <linux/netlink.h>
 #include <linux/rtnetlink.h>
 ])
+
+AC_CHECK_TYPE([struct ip],
+AC_DEFINE([HAVE_IP_STRUCT], [1], [Define to 1 if <netinet/ip.h> defines struct ip]),,[
+#include <asm/types.h>
+#include <sys/socket.h>
+#include <netinet/ip.h>
+])
+
+AC_CHECK_TYPE([struct tcphdr],
+AC_DEFINE([HAVE_TCPHDR_STRUCT], [1], [Define to 1 if <netinet/tcp.h> defines struct tcphdr]),,[
+#include <asm/types.h>
+#include <sys/socket.h>
+#include <netinet/tcp.h>
+])
+
+AC_CHECK_TYPE([struct udphdr],
+AC_DEFINE([HAVE_UDPHDR_STRUCT], [1], [Define to 1 if <netinet/udp.h> defines struct udphdr]),,[
+#include <asm/types.h>
+#include <sys/socket.h>
+#include <netinet/udp.h>
+])
+
+AC_CHECK_TYPE([struct icmp],
+AC_DEFINE([HAVE_ICMP_STRUCT], [1], [Define to 1 if <netinet/ip_icmp.h> defines struct icmp]),,[
+#include <asm/types.h>
+#include <sys/socket.h>
+#include <netinet/ip_icmp.h>
+])
+
 
 
 AC_CHECK_MEMBERS([struct ifreq.ifr_mtu], [], [],
