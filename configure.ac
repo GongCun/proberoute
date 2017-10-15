@@ -11,8 +11,11 @@ AC_PROG_CXX([xlc++ c++])
 AC_PROG_CC([xlc++ c++])
 
 # Checks for libraries.
-AC_CHECK_LIB(pcap, pcap_open_live, [], [AC_MSG_ERROR([cannot find libpcap])])
+##AC_CHECK_LIB(pcap, pcap_open_live, [], [AC_MSG_ERROR([cannot find libwpcap])])
 AC_CHECK_LIB(popt, poptGetContext, [], [AC_MSG_ERROR([cannot find libpopt])])
+AC_SEARCH_LIBS(pcap_open_live, pcap wpcap,
+[AC_DEFINE([HAVE_LIBPCAP], [1])],
+[AC_MSG_ERROR([cannot find libpcap])])
 dnl AC_SEARCH_LIBS(pcap_freecode, pcap)
 dnl AC_SEARCH_LIBS(pcap_close, pcap)
 
@@ -102,25 +105,40 @@ if test $ac_cv_ipv6 = yes; then
 fi
 
 dnl checking for pcap_freecode support
+OS=`uname -s | tr '[:lower:]' '[:upper:]'`
+OLD_CFLAGS="$CFLAGS"
+OLD_LIBS="$LIBS"
+if expr x"$OS" : x"CYGWIN" >/dev/null; then
+  CFLAGS="-D_CYGWIN -DHAVE_REMOTE"
+  LIBS="-lwpcap"
+else
+  CFLAGS="-D_$OS"
+  LIBS="-lpcap"
+fi
+
+dnl echo
+dnl echo CPPFLAGS="$CPPFLAGS"
+dnl echo CFLAGS="$CFLAGS"
+dnl echo LDFLAGS="$LDFAGS"
+dnl echo LIBS="$LIBS"
+dnl echo
+
 AH_TEMPLATE([HAVE_PCAP_FREECODE],
 [Undefine if do not have function pcap_freecode.])
 
-OS=`uname -s | tr '[:lower:]' '[:upper:]'`
 AC_MSG_CHECKING(for pcap_freecode support)
-OLD_CFLAGS="$CFLAGS"
-CFLAGS=-D_$OS
 AC_LINK_IFELSE([AC_LANG_PROGRAM([[
 #include <pcap.h>
 #ifdef _AIX
 # include <net/bpf.h>
 # include <netinet/if_ether.h>
-#else
+#elif !defined _CYGWIN
 # include <net/ethernet.h>
 #endif
 ]], [[struct bpf_program bp; pcap_freecode(&bp);]])], [have_pcap_freecode=yes], [have_pcap_freecode=no])
 AC_MSG_RESULT($have_pcap_freecode)
 
-CFLAGS="$OLD_CFLAGS"
+dnl CFLAGS="$OLD_CFLAGS"
 if test x"$have_pcap_freecode" = x"yes"; then
    AC_DEFINE([HAVE_PCAP_FREECODE], 1, [Define to 1 if the system supports pcap_freecode])
 fi
@@ -130,7 +148,7 @@ AH_TEMPLATE([HAVE_PCAP_CLOSE],
 [Undefine if do not have function pcap_close.])
 
 AC_MSG_CHECKING(for pcap_close support)
-CFLAGS=-D_$OS
+dnl CFLAGS=-D_$OS
 AC_LANG(C)
 AC_LANG_CONFTEST(
 [AC_LANG_PROGRAM([[
@@ -138,11 +156,13 @@ AC_LANG_CONFTEST(
 #ifdef _AIX
 # include <net/bpf.h>
 # include <netinet/if_ether.h>
-#else
+#elif !defined _CYGWIN
 # include <net/ethernet.h>
 #endif
 ]], [[pcap_t *p; pcap_close(p);]])])
-if $CC -o conftest.o conftest.c -lpcap >/dev/null 2>&1; then
+
+
+if $CC $CFLAGS $CPPFLAGS $LDFLAGS -o conftest.o conftest.c $LIBS >/dev/null 2>&1; then
 have_pcap_close=yes
 else
 have_pcap_close=no
