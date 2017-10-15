@@ -10,7 +10,7 @@ int ProbeSock::openSock(const int protocol) throw(ProbeException)
     const int on = 1;
     const int size = MAX_MTU;
 
-#ifdef _LINUX
+#if defined _LINUX || defined _CYGWIN
     if ((rawfd = socket(AF_INET, SOCK_RAW, IPPROTO_RAW)) < 0)
 	throw ProbeException("socket IPPROTO_RAW");
 #else
@@ -49,7 +49,7 @@ int ProbeSock::buildIpHeader(u_char *buf, int protoLen, u_char ttl, u_short flag
     ip->ip_tos = 0;
 
 
-#ifdef _LINUX
+#if defined _LINUX || defined _CYGWIN
     ip->ip_len = htons(iphdrLen + protoLen);
 #else
     ip->ip_len = iphdrLen + protoLen;
@@ -60,7 +60,7 @@ int ProbeSock::buildIpHeader(u_char *buf, int protoLen, u_char ttl, u_short flag
     ip->ip_id = htons(ipid);
     // std::cerr << "ip_id = " << ipid << std::endl;
 
-#ifdef _LINUX
+#if defined _LINUX || defined _CYGWIN
     ip->ip_off = htons(flagFrag);
 #else
     ip->ip_off = flagFrag;
