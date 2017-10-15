@@ -31,7 +31,10 @@
 #ifdef HAVE_SOCKADDR_DL_STRUCT
 #include <net/if_dl.h>		/* struct sockaddr_dl */
 #endif
+
+#ifdef HAVE_NET_ROUTE_H
 #include <net/route.h>		/* struct rt_msghdr */
+#endif
 
 #ifdef _LINUX
 #include <asm/types.h>
@@ -49,7 +52,7 @@
 #ifdef _AIX
 # include <net/bpf.h>
 # include <netinet/if_ether.h>
-#else
+#elif defined HAVE_NET_ETHERNET_H
 # include <net/ethernet.h>
 #endif
 
@@ -58,7 +61,7 @@
 #include <strings.h>		// bzero()
 #include <assert.h>
 
-#ifdef _LINUX
+#if defined _LINUX || defined _CYGWIN
 #include <typeinfo>
 #endif
 #include <iostream>
@@ -90,6 +93,77 @@
 #define PROBE_UDP_LEN 8		 // UDP header length 
 #define PROBE_ICMP_LEN 8	 // ICMP header length 
 #define MAX_GATEWAY 9		 // Maximum source route records
+
+#ifndef HAVE_ICMP_STRUCT        // cygwin on Windows don't define ICMP header
+struct icmp 
+{
+    uint8_t icmp_type;      // type of message
+    uint8_t icmp_code;      // type sub code
+    uint16_t icmp_cksum;    // ones complement checksum of struct
+    union 
+    {
+        struct ih_idseq 
+        {
+            uint16_t icd_id;
+            uint16_t icd_seq;
+        } ih_idseq;         // for ICMP_ECHO, ICMP_TSTAMP
+        uint32_t ih_void;   // for ICMP_UNREACH
+    } icmp_hun;
+
+#define icmp_id   icmp_hun.ih_idseq.icd_id
+#define icmp_seq  icmp_hun.ih_idseq.icd_seq
+#define icmp_void icmp_hun.ih_void
+
+    union 
+    {
+        struct 
+        {
+            uint32_t its_otime;
+            uint32_t its_rtime;
+            uint32_t its_ttime;
+        } id_ts;            // for ICMP_TSTAMP
+        struct 
+        {
+            struct ip idi_ip;
+        } id_ip;
+    } icmp_dun;
+#define icmp_otime icmp_dun.id_ts.its_otime
+#define icmp_rtime icmp_dun.id_ts.its_rtime
+#define icmp_ttime icmp_dun.id_ts.its_ttime
+};
+
+#define ICMP_ECHOREPLY          0               /* Echo Reply */
+#define ICMP_UNREACH            3               /* dest unreachable, codes: */
+#define ICMP_REDIRECT           5               /* Redirect (change route) */
+#define ICMP_ECHO               8               /* Echo Request */
+#define ICMP_ROUTERADVERT       9               /* router advertisement */
+#define ICMP_ROUTERSOLICIT      10              /* router solicitation */
+#define ICMP_TIMXCEED           11              /* time exceeded, code: */
+#define ICMP_PARAMPROB          12              /* ip header bad */
+#define ICMP_TSTAMP             13              /* timestamp request */
+#define ICMP_TSTAMPREPLY        14              /* timestamp reply */
+#define ICMP_IREQ               15              /* information request */
+#define ICMP_IREQREPLY          16              /* information reply */
+#define ICMP_MASKREQ            17              /* address mask request */
+#define ICMP_MASKREPLY          18              /* address mask reply */
+
+/* UNREACH codes */
+#define ICMP_UNREACH_NEEDFRAG   4               /* IP_DF caused drop */
+
+/* TIMEXCEED codes */
+#define ICMP_TIMXCEED_INTRANS   0               /* ttl==0 in transit */
+#define ICMP_TIMXCEED_REASS     1               /* ttl==0 in reass */
+
+
+#endif
+
+#ifndef HAVE_ICMP_NEXTMTU
+// Path MTU Discovery (RFC1191)
+struct my_pmtu {
+    u_short ipm_void;
+    u_short ipm_nextmtu;
+};
+#endif
 
 
 extern sigjmp_buf jumpbuf;
@@ -483,13 +557,6 @@ protected:
     int iphdrLen;
     uint16_t ipid;
 
-#ifndef HAVE_ICMP_NEXTMTU
-    // Path MTU Discovery (RFC1191)
-    struct my_pmtu {
-	u_short ipm_void;
-	u_short ipm_nextmtu;
-    };
-#endif
 }; // class ProbeSock
 
 class IcmpProbeSock: public ProbeSock {
