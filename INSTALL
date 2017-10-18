@@ -16,6 +16,7 @@ On GNU/Linux
   $ autoheader
   $ autoconf
   $ touch ./config.h && ./configure
+  $ make
   $ sudo make install
 
 On AIX
@@ -25,4 +26,22 @@ On AIX
   $ autoheader
   $ autoconf
   $ touch ./config.h && ./configure
+  $ make
   $ sudo gmake install
+
+On Windows (Cygwin)
+============
+
+  $ autoheader
+  $ autoconf
+
+  # specify the compiler flags
+  $ export LIBS=-lwpcap
+  $ export LDFLAGS=-L/usr/local/lib/x64
+  $ export CPPFLAGS=-I/usr/local/include
+  $ export CFLAGS=-DHAVE_REMOTE
+
+  $ touch ./config.h && ./configure
+  $ make
+  $ make install
+

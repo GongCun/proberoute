@@ -25,7 +25,16 @@ dnl AC_SEARCH_LIBS(pcap_close, pcap)
 # Checks for header files.
 AC_CHECK_HEADERS([arpa/inet.h fcntl.h netdb.h netinet/in.h stdlib.h strings.h sys/ioctl.h \
 sys/socket.h sys/time.h unistd.h net/if_dl.h asm/types.h netinet/ip.h netinet/tcp.h netinet/udp.h \
-netinet/ip_icmp.h net/route.h net/ethernet.h])
+net/route.h net/ethernet.h])
+
+AH_TEMPLATE([HAVE_NETINET_IP_ICMP_H],
+[Undefine if do not have netinet/ip_icmp.h.])
+AC_CHECK_HEADERS([netinet/ip_icmp.h], [], [],
+[#include <sys/types.h>
+#ifdef HAVE_SYS_SOCKET_H
+#include <sys/socket.h>
+#endif
+])
 
 # Checks for typedefs, structures, and compiler characteristics.
 ##AC_CHECK_HEADER_STDBOOL
@@ -73,29 +82,28 @@ AC_DEFINE([HAVE_RTMSG_STRUCT], [1], [Define to 1 if <linux/rtnetlink.h> defines 
 
 AC_CHECK_TYPE([struct ip],
 AC_DEFINE([HAVE_IP_STRUCT], [1], [Define to 1 if <netinet/ip.h> defines struct ip]),,[
-#include <asm/types.h>
 #include <sys/socket.h>
 #include <netinet/ip.h>
 ])
 
 AC_CHECK_TYPE([struct tcphdr],
 AC_DEFINE([HAVE_TCPHDR_STRUCT], [1], [Define to 1 if <netinet/tcp.h> defines struct tcphdr]),,[
-#include <asm/types.h>
 #include <sys/socket.h>
+#include <netinet/ip.h>
 #include <netinet/tcp.h>
 ])
 
 AC_CHECK_TYPE([struct udphdr],
 AC_DEFINE([HAVE_UDPHDR_STRUCT], [1], [Define to 1 if <netinet/udp.h> defines struct udphdr]),,[
-#include <asm/types.h>
 #include <sys/socket.h>
+#include <netinet/ip.h>
 #include <netinet/udp.h>
 ])
 
 AC_CHECK_TYPE([struct icmp],
 AC_DEFINE([HAVE_ICMP_STRUCT], [1], [Define to 1 if <netinet/ip_icmp.h> defines struct icmp]),,[
-#include <asm/types.h>
 #include <sys/socket.h>
+#include <netinet/ip.h>
 #include <netinet/ip_icmp.h>
 ])
 

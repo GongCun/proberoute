@@ -16,12 +16,25 @@ endif
 OBJS = main.o ProbeAddressInfo.o ProbeException.o ProbePcap.o ProbeSock.o \
 options.o
 
+ifeq (CYGWIN, $(OS))
+OBJS += getmac.dll
+override LIBS += -lgetmac
+override LDFLAGS += -L.
+endif
+
 PROGS = proberoute
 
 all: ${PROGS}
 
 proberoute: $(OBJS) 
-	${CC} ${CFLAGS} -o $@ $^ $(LDFLAGS) $(LIBS)
+	${CC} ${CFLAGS} -D_$(OS) -o $@ $(filter-out %.dll,$^) $(LDFLAGS) $(LIBS)
+
+ifeq (CYGWIN, $(OS))
+  # must use C compile mode
+  getmac.dll: getmac.c
+	cc -Wall -g -c -o getmac.o $<
+	cc -shared -o $@ getmac.o -lws2_32
+endif
 
 %.o: %.cpp ProbeRoute.hpp config.h usage.h
 	$(CC) $(CPPFLAGS) -c -o $@ $<
@@ -51,4 +64,4 @@ $(PROGS)_man.pdf: $(PROGS).1
 	ps2pdf $(PROGS).ps $@
 
 clean:
-	rm -f ${PROGS} *.o core *.BAK *~ usage.h
+	rm -f ${PROGS} ${PROGS}.exe *.o *.dll core *.BAK *~ usage.h

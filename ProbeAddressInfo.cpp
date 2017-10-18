@@ -240,7 +240,9 @@ ProbeAddressInfo::ProbeAddressInfo(const char *foreignHost, const char *foreignS
             bzero(strGateway, sizeof(strGateway));
             bzero(strDestinationMask, sizeof(strDestinationMask));
             paddr = (struct sockaddr_in *)curr->ai_addr;
+#ifndef _CYGWIN
             getRouteInfo(&paddr->sin_addr);
+#endif
 
             // Get the outgoing interface.
 	    if (connect(sockfd, curr->ai_addr, curr->ai_addrlen) < 0) {
@@ -269,6 +271,12 @@ ProbeAddressInfo::ProbeAddressInfo(const char *foreignHost, const char *foreignS
         if (inet_pton(AF_INET, localHost, &paddr->sin_addr) != 1)
             throw ProbeException("inet_pton error");
     }
+
+#ifdef _CYGWIN
+    // suppose Windows use default gateway
+    getRouteInfo(&paddr->sin_addr);
+#endif
+
 
     // specify the local port
     if (localPort)
@@ -311,6 +319,14 @@ ProbeAddressInfo::ProbeAddressInfo(const char *foreignHost, const char *foreignS
 
     if (verbose > 2) p->print();  // the iface address maybe different from
                                   // specified source address
+
+    if (p->netmask && Netmask == NULL) {
+	if ((Netmask = (struct sockaddr *)calloc(1, sizeof(struct sockaddr))) == NULL)
+	    throw ProbeException("calloc Netmask");
+	
+	memcpy(Netmask, p->netmask, sizeof(struct sockaddr));
+    }
+    
 
     // Compare the destination address with netmask and broadcast
     // address to determine whether the remote host and local host are
@@ -402,7 +418,7 @@ extern "C" {
     static const char *mask_ntop(const struct sockaddr *sa, char *buf, const ssize_t size);
 }
 
-#if !defined _LINUX && defined HAVE_RT_MSGHDR_STRUCT
+#if !defined _LINUX && !defined _CYGWIN && defined HAVE_RT_MSGHDR_STRUCT
 void ProbeAddressInfo::getRouteInfo(const struct in_addr *addr) throw(ProbeException)
 {
     int sockfd;
@@ -679,6 +695,17 @@ void ProbeAddressInfo::getRouteInfo(const struct in_addr *addr) throw(ProbeExcep
     return;
     
 }
+#elif defined _CYGWIN
+void ProbeAddressInfo::getRouteInfo(const struct in_addr *addr) throw(ProbeException)
+{
+    // suppose default gateway
+    strcpy(strDestination, "0.0.0.0");
+    strcpy(strGateway, "unsupported");
+    strcpy(strDestinationMask, "unsupported");
+    winGetRouteInfo(inet_ntoa(*addr), strGateway, strDestinationMask);
+    return;
+}
+
 #else
 void ProbeAddressInfo::getRouteInfo(const struct in_addr *addr) throw(ProbeException)
 {

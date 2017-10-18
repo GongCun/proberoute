@@ -73,14 +73,25 @@
 #include <vector>
 
 #ifdef _CYGWIN
+extern "C" {
+#include "getmac.h"
+}
+#endif
+
+#ifdef _CYGWIN
 #define CAP_LEN 65536            // from WinPcap example (Interpreting the packets)
 #else
 #define CAP_LEN 1514             // Maximum capture length
 #endif
-#define CAP_TIMEOUT 500          // Milliseconds; This timeout is used to arrange
+#ifdef _CYGWIN
+#define CAP_TIMEOUT 500
+#else
+#define CAP_TIMEOUT 1            // Milliseconds; This timeout is used to arrange
                                  // that the read not necessarily return immediately
                                  // when a packet is seen. In some OS (such as AIX),
                                  // this parameter does not take effect.
+#endif
+#define GUESS_CAP_LEN 1514
 
 #ifndef IFNAMSIZ
 #define IFNAMSIZ 16
@@ -189,6 +200,12 @@ extern u_char tcpopt[TCP_OPT_LEN], ipopt[IP_OPT_LEN];
 extern u_char *optptr;
 extern std::vector<int> protoVec;
 extern std::string captureFunc;
+extern struct sockaddr *Netmask;  // for CYGWIN capture filter in case
+#ifdef _CYGWIN
+extern const u_char EtherLen;
+extern u_char EtherHdr[];	  // for keep the MAC address and type
+extern pcap_t *Sendfp;
+#endif
 
 inline int Rand()
 {
@@ -412,38 +429,30 @@ private:
     const std::string DEV;
     const std::string CMD;
     struct bpf_program bpfCode;
-    static ProbePcap* _instance;
-
-protected:
-    ProbePcap(const char *,
-	      const char *) throw(ProbeException);
     
 public:
-    // Singleton
-    static ProbePcap* Instance(const char *,
+    ProbePcap(const char *,
 			       const char *) throw(ProbeException);
 
-    static void resetInstance() {
-	if (_instance) {
-	    delete _instance;
-	    _instance = NULL;
-	}
-    }
-    
     ~ProbePcap() {
+#ifndef _CYGWIN 		  // pcap_close will trigger pcap_next error on Windows
 #ifdef HAVE_PCAP_CLOSE
         pcap_close(handle);
 #elif defined HAVE_PCAP_FREECODE
         pcap_freecode(&bpfCode);
 #endif
-	// delete _instance;
-	// _instance = NULL;
+#endif
 	// std::cerr << "EXIT PCAP" << std::endl;
+    }
+
+    inline const int getEthLen() const {
+        return ethLen;
     }
 
     const u_char *nextPcap(int *len);
 }; // class ProbePcap
 
+////////////////////////////////////////
 class ProbeSock {
     friend std::ostream& operator<<(std::ostream&,
 				    const ProbeSock&);
@@ -494,7 +503,11 @@ public:
         }
     }
 
-    ssize_t sendPacket(const void *, size_t, int, const struct sockaddr *, socklen_t) throw(ProbeException);
+    ssize_t sendPacket(const void *,
+			       size_t, int,
+			       const struct sockaddr *,
+			       socklen_t) throw(ProbeException);
+
     int sendFragPacket(const u_char *tcpbuf, const int packlen,
 		       const u_char ttl, const int fragsize,
 		       const struct sockaddr *to, socklen_t tolen) throw(ProbeException);
