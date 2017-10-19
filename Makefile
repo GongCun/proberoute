@@ -22,6 +22,35 @@ override LIBS += -lgetmac
 override LDFLAGS += -L.
 endif
 
+define install-func
+  @echo copy $(PROGS) to ${DESTDIR}$(BINDIR)
+  @[ -d ${DESTDIR}${BINDIR}/ ] ||						\
+    (umask 022 && mkdir -p ${DESTDIR}${BINDIR}/;				\
+    chmod 755 ${DESTDIR}${BINDIR}/)
+
+  @if test $(OS) = AIX; then							\
+    install -s -S -f ${DESTDIR}${BINDIR}/ -M 4755 -O root -G system ${PROGS};	\
+  elif test $(OS) != CYGWIN; then						\
+      install ${PROGS} ${DESTDIR}${BINDIR} && (cd ${DESTDIR}${BINDIR};		\
+        strip -s ${PROGS} && chmod 4755 ${PROGS} && chown root ${PROGS});	\
+  else										\
+      install ${PROGS} ${DESTDIR}${BINDIR} && (cd ${DESTDIR}${BINDIR};		\
+        strip -s ${PROGS} && chmod 4755 ${PROGS})				\
+  fi
+
+  @echo copy $(PROGS).1 to ${DESTDIR}$(MANDIR)
+  @[ -d ${DESTDIR}${MANDIR}/ ] ||						\
+    (umask 022 && mkdir -p ${DESTDIR}${MANDIR}/;				\
+    chmod 755 ${DESTDIR}${MANDIR}/)
+
+  @if test $(OS) = AIX; then							\
+    install -s -f ${DESTDIR}${MANDIR}/ -M 644 -O root -G system ${PROGS}.1;	\
+  else										\
+    install ${PROGS}.1 ${DESTDIR}${MANDIR} &&					\
+    (cd ${DESTDIR}${MANDIR}; chmod 644 ${PROGS}.1)				\
+  fi
+endef
+
 PROGS = proberoute
 
 all: ${PROGS}
@@ -31,9 +60,12 @@ proberoute: $(OBJS)
 
 ifeq (CYGWIN, $(OS))
   # must use C compile mode
-  getmac.dll: getmac.c
-	cc -Wall -g -c -o getmac.o $<
-	cc -shared -o $@ getmac.o -lws2_32
+  objects = getmac.o getroute.o
+  $(objects): %.o: %.c
+	cc -Wall -g -c -o $@ $<
+
+  getmac.dll: $(objects)
+	cc -shared -o $@ $^ -lws2_32
 endif
 
 %.o: %.cpp ProbeRoute.hpp config.h usage.h
@@ -44,16 +76,7 @@ usage.h: usage.txt
 	sed <$< -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/.*/P("&");/' | tr -d '\r' >>$@ 
 
 install: $(PROGS) $(PROGS).1
-	@echo copy $(PROGS) to ${DESTDIR}$(BINDIR)
-	@[ -d ${DESTDIR}${BINDIR}/ ] || \
-		(umask 022 && mkdir -p ${DESTDIR}${BINDIR}/; \
-		chmod 755 ${DESTDIR}${BINDIR}/)
-	@install -s -S -f ${DESTDIR}${BINDIR}/ -M 4755 -O root -G system ${PROGS}
-	@echo copy $(PROGS).1 to ${DESTDIR}$(MANDIR)
-	@[ -d ${DESTDIR}${MANDIR}/ ] || \
-		(umask 022 && mkdir -p ${DESTDIR}${MANDIR}/; \
-		chmod 755 ${DESTDIR}${MANDIR}/)
-	@install -s -f ${DESTDIR}${MANDIR}/ -M 644 -O root -G system ${PROGS}.1
+	$(install-func)
 
 man: $(PROGS)_man.pdf
 

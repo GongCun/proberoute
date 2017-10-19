@@ -240,9 +240,7 @@ ProbeAddressInfo::ProbeAddressInfo(const char *foreignHost, const char *foreignS
             bzero(strGateway, sizeof(strGateway));
             bzero(strDestinationMask, sizeof(strDestinationMask));
             paddr = (struct sockaddr_in *)curr->ai_addr;
-#ifndef _CYGWIN
             getRouteInfo(&paddr->sin_addr);
-#endif
 
             // Get the outgoing interface.
 	    if (connect(sockfd, curr->ai_addr, curr->ai_addrlen) < 0) {
@@ -271,12 +269,6 @@ ProbeAddressInfo::ProbeAddressInfo(const char *foreignHost, const char *foreignS
         if (inet_pton(AF_INET, localHost, &paddr->sin_addr) != 1)
             throw ProbeException("inet_pton error");
     }
-
-#ifdef _CYGWIN
-    // suppose Windows use default gateway
-    getRouteInfo(&paddr->sin_addr);
-#endif
-
 
     // specify the local port
     if (localPort)
@@ -698,11 +690,29 @@ void ProbeAddressInfo::getRouteInfo(const struct in_addr *addr) throw(ProbeExcep
 #elif defined _CYGWIN
 void ProbeAddressInfo::getRouteInfo(const struct in_addr *addr) throw(ProbeException)
 {
-    // suppose default gateway
-    strcpy(strDestination, "0.0.0.0");
-    strcpy(strGateway, "unsupported");
-    strcpy(strDestinationMask, "unsupported");
-    winGetRouteInfo(inet_ntoa(*addr), strGateway, strDestinationMask);
+    struct RouteInfo *rtihead, *rti;
+
+    if ((rtihead = GetRouteInfo()) == NULL)
+	throw ProbeException("GetRouteInfo failed");
+
+    for (rti = rtihead; rti; rti = rti->rt_next) {
+	if (
+	    (*((uint32_t *)&addr->s_addr) & rti->rt_mask) ==
+	    *((uint32_t *)&rti->rt_dest)
+	) {
+	    if (
+		inet_ntop(AF_INET, &rti->rt_dest, strDestination, INET_ADDRSTRLEN) == NULL ||
+		inet_ntop(AF_INET, &rti->rt_gateway, strGateway, INET_ADDRSTRLEN) == NULL ||
+		inet_ntop(AF_INET, &rti->rt_mask, strDestinationMask, INET_ADDRSTRLEN) == NULL
+	    )
+		throw ProbeException("inet_ntop");
+
+	    break;
+	}
+    }
+
+    FreeRouteInfo(rtihead);
+
     return;
 }
 

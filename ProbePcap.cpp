@@ -330,7 +330,15 @@ const u_char *ProbePcap::nextPcap(int *len)
     static struct argPcap *argPcap = NULL;
 
     if (recvfd < 0) {
+#ifdef _CYGWIN
+	// Cygwin _DOESN'T_ support receive data from raw socket. With
+	// Winsock, a raw socket can be used with the SIO_RCVALL IOCTL
+	// to receive all IP packets through a network interface, the
+	// protocol must be set to IPPROTO_IP.
+	if ((recvfd = socket(AF_INET, SOCK_RAW, IPPROTO_IP)) < 0)
+#else
 	if ((recvfd = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP)) < 0)
+#endif
             errExit("socket recvfd", errno);
     }
 
