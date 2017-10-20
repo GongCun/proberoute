@@ -61,7 +61,7 @@ proberoute: $(OBJS)
 ifeq (CYGWIN, $(OS))
   # must use C compile mode
   objects = getmac.o getroute.o
-  $(objects): %.o: %.c
+  $(objects): %.o: %.c getmac.h
 	cc -Wall -g -c -o $@ $<
 
   getmac.dll: $(objects)
