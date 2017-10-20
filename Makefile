@@ -86,5 +86,16 @@ $(PROGS)_man.pdf: $(PROGS).1
 	groff -man -Tps <$< >$(PROGS).ps)
 	ps2pdf $(PROGS).ps $@
 
+ifeq (CYGWIN, $(OS))
+  # copy the DLL file to build folder
+  BUILDDIR := build
+
+  build: $(PROGS)
+	@[ -d ${BUILDDIR}/ ] || mkdir -p ${BUILDDIR}/
+	@cygcheck $(PROGS) | sed '1d' | grep -e cygwin -e pcap -e packet | sed 's/\\/\\\\/g' | \
+	while read f; do cp -p $$f ${BUILDDIR}/; done
+	cp -p $(PROGS) ${BUILDDIR}/ && strip -s ${BUILDDIR}/$(PROGS)
+endif
+
 clean:
 	rm -f ${PROGS} ${PROGS}.exe *.o *.dll core *.BAK *~ usage.h
