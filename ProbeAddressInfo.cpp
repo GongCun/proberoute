@@ -262,13 +262,11 @@ ProbeAddressInfo::ProbeAddressInfo(const char *foreignHost, const char *foreignS
     paddr = (struct sockaddr_in *)&localAddr;
     localAddrLen = sizeof(struct sockaddr_in);
 
-    if (localHost == NULL) {
-        if (getsockname(sockfd, &localAddr, &localAddrLen) < 0)
-            throw ProbeException("getsockname");
-    } else {
+    if (getsockname(sockfd, &localAddr, &localAddrLen) < 0)
+        throw ProbeException("getsockname");
+    if (localHost)              // use the given IP instead of detected IP
         if (inet_pton(AF_INET, localHost, &paddr->sin_addr) != 1)
             throw ProbeException("inet_pton error");
-    }
 
     // specify the local port
     if (localPort)
