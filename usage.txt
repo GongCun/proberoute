@@ -50,3 +50,6 @@ Options
                   Loose Source Route. Tell the network to route the packet
                   through the specified gateway (Unfortunately, most routers
                   have disabled source routing for security reasons).
+-l, --list        Print the list of the network interface avaiable on the
+                  system,  but Proberoute can't sniff loopback packets on
+                  Windows system.

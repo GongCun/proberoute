@@ -2,6 +2,10 @@
 #include <assert.h>
 #include <errno.h>
 
+// static data member must be defined (exactly once) outside the class body
+struct ProbeAddressInfo::deviceInfo *
+ProbeAddressInfo::deviceInfoList = NULL;
+
 void ProbeAddressInfo::getDeviceInfo() throw(ProbeException)
 {
     int sockfd;
@@ -176,6 +180,16 @@ void ProbeAddressInfo::deviceInfo::print()
     std::cout << "mtu " << mtu << std::endl;
 }
 
+void ProbeAddressInfo::deviceInfo::list()
+{
+    struct sockaddr_in *sinptr;
+
+    sinptr = (struct sockaddr_in *)addr;
+
+    std::cout << name << ' ' << inet_ntoa(sinptr->sin_addr) << std::endl;
+
+    return;
+}
 
 void ProbeAddressInfo::printDeviceInfo()
 {
@@ -184,6 +198,20 @@ void ProbeAddressInfo::printDeviceInfo()
     for (deviceInfoPtr = deviceInfoList; deviceInfoPtr;
          deviceInfoPtr = deviceInfoPtr->next) {
         deviceInfoPtr->print();
+    }
+
+}
+
+void ProbeAddressInfo::listDeviceInfo()
+{
+    int i;
+    struct deviceInfo *deviceInfoPtr;
+
+    for (i = 1, deviceInfoPtr = deviceInfoList;
+	 deviceInfoPtr;
+         deviceInfoPtr = deviceInfoPtr->next, ++i) {
+	std::cout << i << ". ";
+        deviceInfoPtr->list();
     }
 
 }

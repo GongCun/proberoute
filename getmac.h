@@ -12,10 +12,15 @@ struct RouteInfo
     struct RouteInfo *rt_next;
 };
     
+/* 
+ * Fill MacAddress in buf and Return Length:
+ *   >=  0: MacAddress Length
+ *    = -1: Not found address
+ *    = -2: other error
+ */
+int getmac(const char *destip, unsigned char *buf);
+int getmacByDevice(const char *device, unsigned char *buf);
 
-int getmac(const char *, unsigned char *);
-int getarp(const char *destip, unsigned char *buf); /* 0: fill the MacAddress of destip to
-						     * buf; 1: not found; -1: error */
 struct RouteInfo *GetRouteInfo(void);
 void FreeRouteInfo(struct RouteInfo *rtihead);
 

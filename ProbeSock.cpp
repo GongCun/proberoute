@@ -106,7 +106,7 @@ ssize_t ProbeSock::sendPacket(const void *buf, size_t buflen, int flags, const s
 #endif
     ssize_t len;
     
-    if ((len = sendto(rawfd, buf, buflen, flags, to, tolen)) != buflen)
+    if ((len = sendto(rawfd, buf, buflen, flags, to, tolen)) != (ssize_t)buflen)
 	throw ProbeException("sendto error");
 
     // std::cerr << "sendto " << len << " bytes\n";
