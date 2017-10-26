@@ -295,16 +295,11 @@ void *captPkt(void *arg)
             }
         }
 
-#ifdef _CYGWIN
         // fprintf(stderr, "caplen = %d, ethLen = %d\n", hdr->caplen, *ethLen);
 	if (!hdr->caplen)
 	    *Len = GUESS_CAP_LEN - *ethLen; // WinPcap don't return the caplen or len
 	else
             *Len = hdr->caplen - *ethLen;
-
-#else
-        *Len = hdr.caplen - *ethLen;
-#endif
 
         Ptr = ptr + (*ethLen);
         done = PCAP;		  // pcap_xxx capture succeed

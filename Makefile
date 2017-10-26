@@ -4,6 +4,8 @@ CPPFLAGS += -D_$(OS)
 VERSION = 1.0
 BINDIR = /usr/local/bin
 MANDIR = /usr/local/share/man/man1
+LIBDIR = /usr/local/lib
+DLLFILE := getmac.dll
 
 ifeq (AIX, $(OS))
 include Makefile.aix
@@ -35,7 +37,10 @@ define install-func
         strip -s ${PROGS} && chmod 4755 ${PROGS} && chown root ${PROGS});	\
   else										\
       install ${PROGS} ${DESTDIR}${BINDIR} && (cd ${DESTDIR}${BINDIR};		\
-        strip -s ${PROGS} && chmod 4755 ${PROGS})				\
+        strip -s ${PROGS} && chmod 4755 ${PROGS});				\
+      echo copy $(DLLFILE) to ${DESTDIR}${BINDIR};				\
+      install ${DLLFILE} ${DESTDIR}${BINDIR} && (cd ${DESTDIR}${BINDIR};	\
+        strip -s ${DLLFILE} && chmod 755 ${DLLFILE});				\
   fi
 
   @echo copy $(PROGS).1 to ${DESTDIR}$(MANDIR)
@@ -47,7 +52,7 @@ define install-func
     install -s -f ${DESTDIR}${MANDIR}/ -M 644 -O root -G system ${PROGS}.1;	\
   else										\
     install ${PROGS}.1 ${DESTDIR}${MANDIR} &&					\
-    (cd ${DESTDIR}${MANDIR}; chmod 644 ${PROGS}.1)				\
+    (cd ${DESTDIR}${MANDIR}; chmod 644 ${PROGS}.1);				\
   fi
 endef
 

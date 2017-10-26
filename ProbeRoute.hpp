@@ -206,6 +206,7 @@ extern const u_char EtherLen;
 extern u_char EtherHdr[];	  // for keep the MAC address and type
 extern pcap_t *Sendfp;
 #endif
+extern bool listDevice;
 
 inline int Rand()
 {
@@ -325,6 +326,7 @@ private:
 	}
 
         void print();
+	void list();
     };
 
 public:
@@ -377,10 +379,11 @@ public:
     }
             
             
-    struct deviceInfo *deviceInfoList; // the entry of device linked list
-    void getDeviceInfo() throw(ProbeException);
-    void freeDeviceInfo();
-    void printDeviceInfo();
+    static struct deviceInfo *deviceInfoList; // the entry of device linked list
+    static void getDeviceInfo() throw(ProbeException);
+    static void freeDeviceInfo();
+    static void printDeviceInfo();
+    static void listDeviceInfo();
     void getRouteInfo(const struct in_addr *) throw(ProbeException);
  
 };
@@ -504,9 +507,9 @@ public:
     }
 
     ssize_t sendPacket(const void *,
-			       size_t, int,
-			       const struct sockaddr *,
-			       socklen_t) throw(ProbeException);
+                       size_t, int,
+                       const struct sockaddr *,
+                       socklen_t) throw(ProbeException);
 
     int sendFragPacket(const u_char *tcpbuf, const int packlen,
 		       const u_char ttl, const int fragsize,

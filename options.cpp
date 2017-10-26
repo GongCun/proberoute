@@ -5,7 +5,7 @@
 enum { OPT_HELP = 1000, OPT_PROTO, OPT_SERV, OPT_DEV, OPT_SRCIP,
        OPT_SYN, OPT_ACK, OPT_PUSH, OPT_NULL, OPT_FIN, OPT_XMAS,
        OPT_ECHO, OPT_ECHOREPLY, OPT_TSTAMP, OPT_TSTAMPREPLY, OPT_GATEWAY,
-       OPT_TCP, OPT_UDP, OPT_ICMP, OPT_ALL
+       OPT_TCP, OPT_UDP, OPT_ICMP, OPT_ALL, OPT_LIST
 };
 
 static void usage()
@@ -50,6 +50,7 @@ static struct poptOption po[] = {
     { "tstamp",       't',  POPT_ARG_NONE,   0,          OPT_TSTAMP,      NULL, NULL },
     { "tstamp-reply", '\0', POPT_ARG_NONE,   0,          OPT_TSTAMPREPLY, NULL, NULL },
     { "source-route", 'j',  POPT_ARG_STRING, 0,          OPT_GATEWAY,     NULL, NULL },
+    { "list",         'l',  POPT_ARG_NONE,   0,          OPT_LIST,        NULL, NULL },
     { NULL,           '\0', POPT_ARG_NONE,   NULL,       0,               NULL, NULL }
 };
 
@@ -192,6 +193,10 @@ int parseOpt(int argc, char **argv, std::string& msg)
 	    }
 	    optptr += sizeof(struct in_addr);
 	    break;
+
+	case OPT_LIST:
+	    listDevice = true;
+	    return 0;
 
 	default:
 	    msg = poptBadOption(pc, POPT_BADOPTION_NOALIAS);
