@@ -140,8 +140,13 @@ ProbePcap::ProbePcap(const char *dev,
 #endif
 }
 
+static pthread_t TID1, TID2;
 static void sig_alrm(int signo) throw(ProbeException)
 {
+    // Ignore the ESRCH error
+    pthread_cancel(TID1);
+    pthread_cancel(TID2);
+
     siglongjmp(jumpbuf, 1);
 #ifdef _AIX
     if (signal(SIGALRM, sig_alrm) == SIG_ERR)
@@ -180,6 +185,13 @@ void *recvPkt(void *arg)
     socklen_t addrlen = sizeof(addr);
     int n;
     int err;
+
+    static sigset_t signal_mask;
+    sigemptyset (&signal_mask);
+    sigaddset (&signal_mask, SIGALRM);
+    err = pthread_sigmask (SIG_BLOCK, &signal_mask, NULL);
+    if (err)
+	errExit("pthread_sigmask in captPkt", err);
 
     // struct timeval tv;
     // tv.tv_sec = 1, tv.tv_usec = 0;
@@ -223,6 +235,13 @@ void *captPkt(void *arg)
     static pcap_t *handle = argPcap->handle;
     int linkType = argPcap->linkType;
     int *ethLen = argPcap->ethLen;
+
+    static sigset_t signal_mask;
+    sigemptyset (&signal_mask);
+    sigaddset (&signal_mask, SIGALRM);
+    err = pthread_sigmask (SIG_BLOCK, &signal_mask, NULL);
+    if (err)
+	errExit("pthread_sigmask in captPkt", err);
 
     // struct timeval tv;
     // tv.tv_sec = 1, tv.tv_usec = 0;
@@ -383,6 +402,8 @@ const u_char *ProbePcap::nextPcap(int *len)
     if (err = pthread_create(&tid2, NULL, recvPkt, NULL)) {
 	errExit("pthread_create recvPkt", err);
     }
+
+    TID1 = tid1, TID2 = tid2;
 
     // _DON'T_ join the thread, otherwise will be block until the specified
     // thread terminated
