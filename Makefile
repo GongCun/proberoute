@@ -34,13 +34,13 @@ define install-func
     install -s -S -f ${DESTDIR}${BINDIR}/ -M 4755 -O root -G system ${PROGS};	\
   elif test $(OS) != CYGWIN; then						\
       install ${PROGS} ${DESTDIR}${BINDIR} && (cd ${DESTDIR}${BINDIR};		\
-        strip -s ${PROGS} && chmod 4755 ${PROGS} && chown root ${PROGS});	\
+        strip ${PROGS} && chmod 4755 ${PROGS} && chown root ${PROGS});		\
   else										\
       install ${PROGS} ${DESTDIR}${BINDIR} && (cd ${DESTDIR}${BINDIR};		\
-        strip -s ${PROGS} && chmod 4755 ${PROGS});				\
+        strip ${PROGS} && chmod 4755 ${PROGS});					\
       echo copy $(DLLFILE) to ${DESTDIR}${BINDIR};				\
       install ${DLLFILE} ${DESTDIR}${BINDIR} && (cd ${DESTDIR}${BINDIR};	\
-        strip -s ${DLLFILE} && chmod 755 ${DLLFILE});				\
+        strip ${DLLFILE} && chmod 755 ${DLLFILE});				\
   fi
 
   @echo copy $(PROGS).1 to ${DESTDIR}$(MANDIR)
@@ -99,7 +99,7 @@ ifeq (CYGWIN, $(OS))
 	@[ -d ${BUILDDIR}/ ] || mkdir -p ${BUILDDIR}/
 	@cygcheck $(PROGS) | sed '1d' | grep -e cygwin -e pcap -e packet | sed 's/\\/\\\\/g' | \
 	while read f; do cp -p $$f ${BUILDDIR}/; done
-	cp -p $(PROGS) ${BUILDDIR}/ && strip -s ${BUILDDIR}/$(PROGS)
+	cp -p $(PROGS) ${BUILDDIR}/ && strip ${BUILDDIR}/$(PROGS)
 endif
 
 clean:
