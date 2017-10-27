@@ -1,7 +1,12 @@
 #include "ProbeRoute.hpp"
 #include <assert.h>
+#ifdef _CYGWIN
+#include <sys/wait.h>
+#include <sys/mman.h>
+#include <signal.h>
+#endif
 
-sigjmp_buf jumpbuf;
+sigjmp_buf jumpbuf, winjump;
 int verbose;
 int srcport;
 const char *device;
@@ -24,6 +29,15 @@ static void Close();
 
 u_char tcpopt[TCP_OPT_LEN], ipopt[IP_OPT_LEN];
 u_char *optptr;
+
+struct sockaddr *Netmask;
+
+#ifdef _CYGWIN
+const u_char EtherLen = 14;
+u_char EtherHdr[64];
+pcap_t *Sendfp = NULL;
+#endif
+bool listDevice = false;
 
 #define printOpt(x) std::cout << #x": " << x << std::endl
 #define printOptStr(x) std::cout << #x": " << nullToEmpty(x) << std::endl
@@ -116,7 +130,8 @@ int main(int argc, char *argv[])
     bool found = false, unreachable = false;
     int code = 0, tcpcode = 0;
 
-    static ProbePcap* capture;
+    int phyDstLen, phySrcLen;	  // Mac Address Length of destination
+				  // and source.
 
     std::vector<ProbeSock *> probeVec;
     std::vector<ProbeSock *>::iterator probe;
@@ -136,9 +151,45 @@ int main(int argc, char *argv[])
 	printOpts();
 
     try {
+
+	if (listDevice) {
+	    ProbeAddressInfo::getDeviceInfo();
+	    ProbeAddressInfo::listDeviceInfo();
+	    ProbeAddressInfo::freeDeviceInfo();
+	    exit(0);
+	}
+
 	ProbeAddressInfo addressInfo(host, service, srcip, srcport, device, mtu);
 	if (verbose > 2)
 	    std::cout << addressInfo << std::endl;
+
+#ifdef _CYGWIN
+	// Since the OS after Windows XP can't send TCP raw data directly, we use
+	// the WinPcap to work around it (use pcap_sendpacket() function), but
+	// must get the destination and source ethernet address first.
+
+	// Fill the gatewayMac + localMac + IPtype, check whether in
+	// the same sub-network later.
+	phyDstLen = getmac(
+	    addressInfo.getGateway(),
+	    EtherHdr
+	);
+	assert(phyDstLen == 6);
+
+	char *p = (char *)addressInfo.getDevice().c_str();
+	while (*p && *p != '{') // Windows device name begin from brace
+	    ++p;
+	
+	phySrcLen = getmacByDevice(p, EtherHdr + phyDstLen);
+	assert(phySrcLen == 6);
+	
+	// IPv4 type is 0x0800 (IPv6 is 0x86DD, ARP is 0x0806, RARP is
+	// 0x8035, and IEEE 802.1Q tag is 0x8100), we only support the
+	// IPv4 now.
+	p = (char *)EtherHdr + phyDstLen + phySrcLen;
+	*p++ = 0x08;
+	*p = 0x00;
+#endif
 
 	sinptr = (struct sockaddr_in *)addressInfo.getLocalSockaddr();
 	src = sinptr->sin_addr;
@@ -147,6 +198,32 @@ int main(int argc, char *argv[])
 	sinptr = (struct sockaddr_in *)addressInfo.getForeignSockaddr();
 	dst = sinptr->sin_addr;
 	dport = ntohs(sinptr->sin_port);
+
+#ifdef _CYGWIN
+	// If the destination in the same sub-network, change the MAC
+	// address of gateway to destination host (not found is OK).
+	if (getmac(inet_ntoa(sinptr->sin_addr), EtherHdr) == -2)
+	    throw ProbeException("getmac error", MSG);
+
+	if (verbose > 2) {
+	    std::cerr << "Ethernet Frame:\n";
+	    for (int i = 0; i < 14; i++)
+		std::fprintf(stderr, "%02x ", EtherHdr[i]);
+	    std::putc('\n', stderr);
+	}
+
+	char errbuf[PCAP_ERRBUF_SIZE];
+	if ((Sendfp = pcap_open(
+		 addressInfo.getDevice().c_str(),
+		 CAP_LEN,
+		 PCAP_OPENFLAG_PROMISCUOUS, // promiscuous mode
+		 1,			    // no timeout (ms)
+		 NULL,			    // authentication on the remote machine
+		 errbuf)) == NULL
+	)
+	    throw ProbeException("pcap_open", errbuf);
+
+#endif
 
 	if ((mtu = addressInfo.getDevMtu()) <= 0) {
 	    std::ostringstream ss;
@@ -184,7 +261,7 @@ int main(int argc, char *argv[])
 		
 	static const int signo[] = { SIGHUP, SIGINT, SIGQUIT, SIGTERM };
 	
-	for (i = 0; i < sizeof(signo) / sizeof(int); i++)
+	for (i = 0; i < (int)(sizeof(signo) / sizeof(int)); i++)
 	    if (signal(signo[i], sig_exit) == SIG_ERR)
 		throw ProbeException("signal");
 
@@ -215,7 +292,7 @@ int main(int argc, char *argv[])
 		    if (setsockopt(connfd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)) < 0)
 			throw ProbeException("setsockopt SO_REUSEADDR");
 #ifdef SO_REUSEPORT
-		    if (setsockopt(connfd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)) < 0)
+		    if (setsockopt(connfd, SOL_SOCKET, SO_REUSEPORT, &on, sizeof(on)) < 0)
 			throw ProbeException("setsockopt SO_REUSEPORT");
 #endif
 		    // Bind local address and specified port
@@ -244,7 +321,7 @@ int main(int argc, char *argv[])
 			// the write() packet arriving to remote host, we need to set the
 			// TTL to 1.
 
-			capture = ProbePcap::Instance(addressInfo.getDevice().c_str(), "tcp");
+			ProbePcap capture(addressInfo.getDevice().c_str(), "tcp");
 
 			optlen = sizeof(origttl);
 			if (getsockopt(connfd, IPPROTO_IP, IP_TTL, &origttl, &optlen) < 0)
@@ -259,7 +336,7 @@ int main(int argc, char *argv[])
 		    
 			// capture the write() packet immediately or when it retransmit
 			for ( ; ; ) {
-			    ptr = capture->nextPcap(&caplen);
+			    ptr = capture.nextPcap(&caplen);
 			    assert(ptr);
 			    if (TcpProbeSock::capWrite(
 				    ptr,
@@ -466,14 +543,13 @@ default:
 	//
 	// Send the probe and obtain the router/host IP
 	// 
-	ProbePcap::resetInstance();
-        capture = ProbePcap::Instance(addressInfo.getDevice().c_str(),
-				      "tcp or "
-				      "icmp[0:1] == 0  or "  // Echo Reply
-				      "icmp[0:1] == 3  or "  // Destination Unreachable
-				      "icmp[0:1] == 11 or "  // Time Exceed
-				      "icmp[0:1] == 12 or "  // Parameter Problem
-				      "icmp[0:1] == 14"	     // Timestamp Reply
+        ProbePcap capture(addressInfo.getDevice().c_str(),
+                          "tcp or "
+                          "icmp[0:1] == 0  or "  // Echo Reply
+                          "icmp[0:1] == 3  or "  // Destination Unreachable
+                          "icmp[0:1] == 11 or "  // Time Exceed
+                          "icmp[0:1] == 12 or "  // Parameter Problem
+                          "icmp[0:1] == 14"      // Timestamp Reply
 	);
 
 	bzero(buf, sizeof(buf));
@@ -573,7 +649,7 @@ default:
 
                 msg = "";
 		for ( ; ; ) {
-		    ptr = capture->nextPcap(&caplen);
+		    ptr = capture.nextPcap(&caplen);
 		    assert(ptr != NULL);
 		    // std::cerr << "!! caplen = " << caplen << std::endl;
 		    
@@ -778,6 +854,10 @@ default:
 
         for (probe = probeVec.begin(); probe != probeVec.end(); ++probe)
             delete *probe;
+	
+#ifdef _CYGWIN
+        pcap_close(Sendfp);
+#endif
 	
     } catch (ProbeException &e) {
 	std::cerr << e.what() << std::endl;

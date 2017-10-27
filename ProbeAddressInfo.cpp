@@ -2,6 +2,10 @@
 #include <assert.h>
 #include <errno.h>
 
+// static data member must be defined (exactly once) outside the class body
+struct ProbeAddressInfo::deviceInfo *
+ProbeAddressInfo::deviceInfoList = NULL;
+
 void ProbeAddressInfo::getDeviceInfo() throw(ProbeException)
 {
     int sockfd;
@@ -49,7 +53,7 @@ void ProbeAddressInfo::getDeviceInfo() throw(ProbeException)
     for (ptr = buf; ptr < buf + ifc.ifc_len; ) {
 	ifr = (struct ifreq *)ptr;
 
-#ifdef _LINUX
+#if defined _LINUX || defined _CYGWIN
 	ptr += sizeof(*ifr);
 #else
 #ifdef HAVE_SOCKADDR_SA_LEN
@@ -96,6 +100,13 @@ void ProbeAddressInfo::getDeviceInfo() throw(ProbeException)
 #endif
 
         deviceInfoPtr->name = ifr->ifr_name;
+
+#ifdef _CYGWIN
+        deviceInfoPtr->name.insert(0, PCAP_SRC_IF_STRING "\\Device\\NPF_");
+#endif
+
+        // std::cerr << "ifr->ifr_name = " << ifr->ifr_name << std::endl;
+        // std::cerr << "deviceInfoPtr->name = " << deviceInfoPtr->name << std::endl;
 
 	assert(ifr->ifr_addr.sa_family == AF_INET);
 
@@ -169,6 +180,16 @@ void ProbeAddressInfo::deviceInfo::print()
     std::cout << "mtu " << mtu << std::endl;
 }
 
+void ProbeAddressInfo::deviceInfo::list()
+{
+    struct sockaddr_in *sinptr;
+
+    sinptr = (struct sockaddr_in *)addr;
+
+    std::cout << name << ' ' << inet_ntoa(sinptr->sin_addr) << std::endl;
+
+    return;
+}
 
 void ProbeAddressInfo::printDeviceInfo()
 {
@@ -177,6 +198,20 @@ void ProbeAddressInfo::printDeviceInfo()
     for (deviceInfoPtr = deviceInfoList; deviceInfoPtr;
          deviceInfoPtr = deviceInfoPtr->next) {
         deviceInfoPtr->print();
+    }
+
+}
+
+void ProbeAddressInfo::listDeviceInfo()
+{
+    int i;
+    struct deviceInfo *deviceInfoPtr;
+
+    for (i = 1, deviceInfoPtr = deviceInfoList;
+	 deviceInfoPtr;
+         deviceInfoPtr = deviceInfoPtr->next, ++i) {
+	std::cout << i << ". ";
+        deviceInfoPtr->list();
     }
 
 }
@@ -255,13 +290,11 @@ ProbeAddressInfo::ProbeAddressInfo(const char *foreignHost, const char *foreignS
     paddr = (struct sockaddr_in *)&localAddr;
     localAddrLen = sizeof(struct sockaddr_in);
 
-    if (localHost == NULL) {
-        if (getsockname(sockfd, &localAddr, &localAddrLen) < 0)
-            throw ProbeException("getsockname");
-    } else {
+    if (getsockname(sockfd, &localAddr, &localAddrLen) < 0)
+        throw ProbeException("getsockname");
+    if (localHost)              // use the given IP instead of detected IP
         if (inet_pton(AF_INET, localHost, &paddr->sin_addr) != 1)
             throw ProbeException("inet_pton error");
-    }
 
     // specify the local port
     if (localPort)
@@ -272,8 +305,16 @@ ProbeAddressInfo::ProbeAddressInfo(const char *foreignHost, const char *foreignS
     // fetch the device name or mtu size by the IP address
     getDeviceInfo();
 
+    // std::cerr << "localAddr = " << inet_ntoa(((struct sockaddr_in *)&localAddr)->sin_addr) << std::endl;
+
     struct deviceInfo *p;
     for (p = deviceInfoList; p; p = p->next) {
+        // std::cerr << "p->name = " << p->name << std::endl;
+	// std::cerr << "p->addr = " <<
+	// inet_ntoa(
+            // ((struct sockaddr_in *)p->addr)->sin_addr
+        // ) << std::endl;
+
 	if (((struct sockaddr_in *)p->addr)->sin_addr.s_addr ==
 	    ((struct sockaddr_in *)&localAddr)->sin_addr.s_addr) {
 	    if (device.empty()) {
@@ -296,6 +337,14 @@ ProbeAddressInfo::ProbeAddressInfo(const char *foreignHost, const char *foreignS
 
     if (verbose > 2) p->print();  // the iface address maybe different from
                                   // specified source address
+
+    if (p->netmask && Netmask == NULL) {
+	if ((Netmask = (struct sockaddr *)calloc(1, sizeof(struct sockaddr))) == NULL)
+	    throw ProbeException("calloc Netmask");
+	
+	memcpy(Netmask, p->netmask, sizeof(struct sockaddr));
+    }
+    
 
     // Compare the destination address with netmask and broadcast
     // address to determine whether the remote host and local host are
@@ -387,7 +436,7 @@ extern "C" {
     static const char *mask_ntop(const struct sockaddr *sa, char *buf, const ssize_t size);
 }
 
-#if !defined _LINUX && defined HAVE_RT_MSGHDR_STRUCT
+#if !defined _LINUX && !defined _CYGWIN && defined HAVE_RT_MSGHDR_STRUCT
 void ProbeAddressInfo::getRouteInfo(const struct in_addr *addr) throw(ProbeException)
 {
     int sockfd;
@@ -664,6 +713,35 @@ void ProbeAddressInfo::getRouteInfo(const struct in_addr *addr) throw(ProbeExcep
     return;
     
 }
+#elif defined _CYGWIN
+void ProbeAddressInfo::getRouteInfo(const struct in_addr *addr) throw(ProbeException)
+{
+    struct RouteInfo *rtihead, *rti;
+
+    if ((rtihead = GetRouteInfo()) == NULL)
+	throw ProbeException("GetRouteInfo failed");
+
+    for (rti = rtihead; rti; rti = rti->rt_next) {
+	if (
+	    (*((uint32_t *)&addr->s_addr) & rti->rt_mask) ==
+	    *((uint32_t *)&rti->rt_dest)
+	) {
+	    if (
+		inet_ntop(AF_INET, &rti->rt_dest, strDestination, INET_ADDRSTRLEN) == NULL ||
+		inet_ntop(AF_INET, &rti->rt_gateway, strGateway, INET_ADDRSTRLEN) == NULL ||
+		inet_ntop(AF_INET, &rti->rt_mask, strDestinationMask, INET_ADDRSTRLEN) == NULL
+	    )
+		throw ProbeException("inet_ntop");
+
+	    break;
+	}
+    }
+
+    FreeRouteInfo(rtihead);
+
+    return;
+}
+
 #else
 void ProbeAddressInfo::getRouteInfo(const struct in_addr *addr) throw(ProbeException)
 {

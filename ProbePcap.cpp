@@ -8,6 +8,8 @@ ProbePcap::ProbePcap(const char *dev,
 		     "icmp[0:1] == 3 or icmp[0:1] == 11 or icmp[0:1] == 12")
     throw(ProbeException) : DEV(dev), CMD(cmd)
 {
+    // std::cerr << "ProbePcap constructor\n";
+    
     char errbuf[PCAP_ERRBUF_SIZE];
     bpf_u_int32 localnet, netmask;
     std::stringstream msg;
@@ -17,8 +19,34 @@ ProbePcap::ProbePcap(const char *dev,
     
     bzero(errbuf, sizeof(errbuf));
 
+#ifdef _CYGWIN
+    pcap_if_t *alldevs;
+    pcap_if_t *d;
+    if (pcap_findalldevs_ex((char *)PCAP_SRC_IF_STRING, NULL, &alldevs, errbuf) == -1) {
+        throw ProbeException("pcap_findalldevs_ex", errbuf);
+    }
+    for (d = alldevs; d; d = d->next) {
+        if (strcmp(dev, d->name) == 0) {
+            // std::cerr << "d->name = " << d->name << std::endl;
+            break;
+        }
+    }
+    if (!d) {
+        pcap_freealldevs(alldevs);
+        throw ProbeException("pcap_findalldevs_ex: can't find device");
+    }
+            
+    handle = pcap_open_live(
+        d->name,                   // name of the device
+        CAP_LEN,
+        PCAP_OPENFLAG_PROMISCUOUS, // promiscuous mode
+        CAP_TIMEOUT,
+        errbuf);
+#else
     // specify promiscuous mode
-    handle = pcap_open_live(dev, CAP_LEN, CAP_TIMEOUT, 1, errbuf);
+    handle = pcap_open_live(dev, CAP_LEN, 1, CAP_TIMEOUT, errbuf);
+#endif
+
     if (handle == NULL)
 	throw ProbeException("pcap_open_live", errbuf);
 
@@ -27,10 +55,41 @@ ProbePcap::ProbePcap(const char *dev,
 
     bzero(errbuf, sizeof(errbuf));
 
+#ifdef _CYGWIN
+    // std::cerr << "CYGWIN Netmask\n";
+    if (d->addresses) {
+        // Retrieve the mask of the first address of the interface
+        netmask = (bpf_u_int32) ((struct sockaddr_in *)
+				 (d->addresses->netmask))->sin_addr.s_addr;
+    }
+    else if (Netmask) {
+        netmask = (bpf_u_int32)((struct sockaddr_in *)
+				Netmask)->sin_addr.s_addr; // fetch from deviceInfo
+    }
+    else
+	netmask = 0xffffff;	  // suppose to be in a C class network
+        
+
+    if (netmask == 0) {	          // check again if netmask is still empty
+	if (Netmask)
+	    netmask = (bpf_u_int32)((struct sockaddr_in *)
+				    Netmask)->sin_addr.s_addr; // fetch from deviceInfo
+	else
+        netmask = 0xffffff;        // suppose to be in a C class network
+    }
+
+    if (verbose > 3)
+	std::fprintf(stderr, "filter netmask is %s\n",
+		     inet_ntoa(*((struct in_addr *)&netmask)));
+
+#else
     if (pcap_lookupnet(dev, &localnet, &netmask, errbuf) < 0)
 	throw ProbeException("pcap_lookupnet", errbuf);
+#endif
 
-    if (pcap_compile(handle, &bpfCode, (char *)cmd, 0, netmask) < 0)
+    // std::fprintf(stderr, "pcap() netmask = 0x%08x\n", netmask);
+
+    if (pcap_compile(handle, &bpfCode, (char *)cmd, 1, netmask) < 0)
 	throw ProbeException("pcap_compile", pcap_geterr(handle));
 
     if (pcap_setfilter(handle, &bpfCode) < 0)
@@ -75,20 +134,19 @@ ProbePcap::ProbePcap(const char *dev,
 	msg << "unsupport datalink (" << linkType << ")";
 	throw ProbeException(msg.str());
     }
+
+#ifdef _CYGWIN
+    pcap_freealldevs(alldevs);
+#endif
 }
 
-ProbePcap* ProbePcap::_instance = NULL;
-ProbePcap* ProbePcap::Instance(const char *dev, const char *cmd) throw(ProbeException)
-{
-    if (_instance == NULL) {
-	_instance = new ProbePcap(dev, cmd);
-    }
-    return _instance;
-}
-
-
+static pthread_t TID1, TID2;
 static void sig_alrm(int signo) throw(ProbeException)
 {
+    // Ignore the ESRCH error
+    pthread_cancel(TID1);
+    pthread_cancel(TID2);
+
     siglongjmp(jumpbuf, 1);
 #ifdef _AIX
     if (signal(SIGALRM, sig_alrm) == SIG_ERR)
@@ -128,6 +186,13 @@ void *recvPkt(void *arg)
     int n;
     int err;
 
+    static sigset_t signal_mask;
+    sigemptyset (&signal_mask);
+    sigaddset (&signal_mask, SIGALRM);
+    err = pthread_sigmask (SIG_BLOCK, &signal_mask, NULL);
+    if (err)
+	errExit("pthread_sigmask in captPkt", err);
+
     // struct timeval tv;
     // tv.tv_sec = 1, tv.tv_usec = 0;
     // select(0, NULL, NULL, NULL, &tv);
@@ -160,17 +225,70 @@ void *captPkt(void *arg)
 {
     struct argPcap *argPcap = (struct argPcap *)arg;
     static const u_char *ptr, *p;
-    struct pcap_pkthdr hdr;
+#ifdef _CYGWIN
+    static struct pcap_pkthdr *hdr = NULL;
+#else
+    static struct pcap_pkthdr hdr;
+#endif
     int err;
-    pcap_t *handle = argPcap->handle;
+    int res;
+    static pcap_t *handle = argPcap->handle;
     int linkType = argPcap->linkType;
     int *ethLen = argPcap->ethLen;
+
+    static sigset_t signal_mask;
+    sigemptyset (&signal_mask);
+    sigaddset (&signal_mask, SIGALRM);
+    err = pthread_sigmask (SIG_BLOCK, &signal_mask, NULL);
+    if (err)
+	errExit("pthread_sigmask in captPkt", err);
 
     // struct timeval tv;
     // tv.tv_sec = 1, tv.tv_usec = 0;
     // select(0, NULL, NULL, NULL, &tv);
 
+#ifdef _CYGWIN
+#ifdef _DEBUG
+    static pcap_dumper_t *dumpfile = NULL;
+    if (dumpfile == NULL &&
+	(dumpfile = pcap_dump_open(handle, "./debug.pcap")) == NULL) {
+	errExit("pcap_dump_open", errno);
+    }
+    while ((res = pcap_next_ex(handle, &hdr, &ptr)) >= 0) {
+	if (res == 0)
+	    continue;		  // timeout elapsed
+
+	fprintf(stderr, "debug success res = %d, hdr->caplen = %d, hdr->len = %d\n",
+		res, hdr->caplen, hdr->len);
+
+	// save the packet on the dump file
+	pcap_dump((unsigned char *)dumpfile, hdr, ptr);
+    }
+    pcap_close(handle);
+    pcap_dump_close(dumpfile);
+#else
+    while ((res = pcap_next_ex(handle, &hdr, &ptr)) <= 0) {
+	if (res == -1) {
+	    fprintf(stderr, "pcap_next_ex: %s\n", pcap_geterr(handle));
+	    exit(1);
+	}
+	else
+	    ;
+    }
+    
+    // fprintf(stderr, "success res = %d, hdr->caplen = %d\n", res, hdr->caplen);
+    /*
+      _Don't_ change the hdr->caplen, otherwise will trigger the pcap_next_ex code (10038)
+      error: Socket operation on nonsocket (WSAENOTSOCK).
+
+      if (!hdr->caplen)
+	  hdr->caplen  = GUESS_CAP_LEN;
+    */
+
+#endif	// _CYGWIN
+#else
     while ((ptr = pcap_next(handle, &hdr)) == NULL) ;
+#endif
 
     if (err = pthread_mutex_lock(&mutex))
         errExit("pthread_mutex_lock captPkt()", err);
@@ -196,7 +314,20 @@ void *captPkt(void *arg)
             }
         }
 
-        *Len = hdr.caplen - *ethLen;
+        // fprintf(stderr, "caplen = %d, ethLen = %d\n", hdr->caplen, *ethLen);
+#ifdef _CYGWIN
+	if (!hdr->caplen)
+#else
+	if (!hdr.caplen)
+#endif
+	    *Len = GUESS_CAP_LEN - *ethLen; // WinPcap don't return the caplen or len
+	else
+#ifdef _CYGWIN
+            *Len = hdr->caplen - *ethLen;
+#else
+            *Len = hdr.caplen - *ethLen;
+#endif
+
         Ptr = ptr + (*ethLen);
         done = PCAP;		  // pcap_xxx capture succeed
     }
@@ -215,17 +346,31 @@ void *captPkt(void *arg)
 const u_char *ProbePcap::nextPcap(int *len)
 {
     // static const u_char *ptr;
-    pthread_t tid1, tid2;
+    pthread_t tid1;
+    pthread_t tid2;
     int err;
     static struct argPcap *argPcap = NULL;
 
-    if (recvfd < 0 &&
-	(recvfd = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP)) < 0) {
-	errExit("socket recvfd", errno);
+    if (recvfd < 0) {
+#ifdef _CYGWIN
+	// Cygwin _DOESN'T_ support receive data from raw socket. With
+	// Winsock, a raw socket can be used with the SIO_RCVALL IOCTL
+	// to receive all IP packets through a network interface, the
+	// protocol must be set to IPPROTO_IP.
+	if ((recvfd = socket(AF_INET, SOCK_RAW, IPPROTO_IP)) < 0)
+#else
+	if ((recvfd = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP)) < 0)
+#endif
+            errExit("socket recvfd", errno);
     }
 
+#ifdef _DEBUG
+    if (signal(SIGALRM, SIG_IGN) == SIG_ERR)
+	throw ProbeException("signal ignore error");
+#else
     if (signal(SIGALRM, sig_alrm) == SIG_ERR)
 	throw ProbeException("signal error");
+#endif
 
     static pthread_mutex_t _mutex = PTHREAD_MUTEX_INITIALIZER;
     static pthread_cond_t _cond = PTHREAD_COND_INITIALIZER;
@@ -258,6 +403,8 @@ const u_char *ProbePcap::nextPcap(int *len)
 	errExit("pthread_create recvPkt", err);
     }
 
+    TID1 = tid1, TID2 = tid2;
+
     // _DON'T_ join the thread, otherwise will be block until the specified
     // thread terminated
 
@@ -276,6 +423,7 @@ const u_char *ProbePcap::nextPcap(int *len)
                   << (done == PCAP ? "pcap()" : "recv()")
                   << std::endl;
         */
+        // CapType savedone = done;
         done = WAIT;
         if (*len > 0) {
             pthread_cancel(tid1);
@@ -284,8 +432,17 @@ const u_char *ProbePcap::nextPcap(int *len)
                 errExit("pthread_mutex_unlock nextPcap()", err);
             break;
         }
-        else
-            errExit("capture error", errno);
+        else {
+            // std::printf("len = %d by %s\n", *len, 
+                        // (savedone == PCAP) ? "pcap()" :
+                        // (savedone == RECV) ? "recv()" : "unknown captured");
+
+            if (err = pthread_mutex_unlock(&mutex))
+                errExit("pthread_mutex_unlock nextPcap()", err);
+            
+            // errExit("capture error", errno);
+        }
+        
     }
     
 

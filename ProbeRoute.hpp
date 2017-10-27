@@ -31,7 +31,10 @@
 #ifdef HAVE_SOCKADDR_DL_STRUCT
 #include <net/if_dl.h>		/* struct sockaddr_dl */
 #endif
+
+#ifdef HAVE_NET_ROUTE_H
 #include <net/route.h>		/* struct rt_msghdr */
+#endif
 
 #ifdef _LINUX
 #include <asm/types.h>
@@ -49,31 +52,46 @@
 #ifdef _AIX
 # include <net/bpf.h>
 # include <netinet/if_ether.h>
-#else
+#elif defined HAVE_NET_ETHERNET_H
 # include <net/ethernet.h>
 #endif
 
 #include <setjmp.h>
 #include <signal.h>
-#include <strings.h>		// bzero()
+#include <strings.h>		 // bzero()
 #include <assert.h>
 
-#ifdef _LINUX
+#if defined _LINUX || defined _CYGWIN
 #include <typeinfo>
 #endif
 #include <iostream>
 #include <sstream>
 #include <string>
-#include <cstring>		// memset(), strcmp(), ...
+#include <cstring>		 // memset(), strcmp(), ...
 #include <stdexcept>
 #include <algorithm>
 #include <vector>
 
+#ifdef _CYGWIN
+extern "C" {
+#include "getmac.h"
+}
+#endif
+
+#ifdef _CYGWIN
+#define CAP_LEN 65536            // from WinPcap example (Interpreting the packets)
+#else
 #define CAP_LEN 1514             // Maximum capture length
-#define CAP_TIMEOUT 500          // Milliseconds; This timeout is used to arrange
+#endif
+#ifdef _CYGWIN
+#define CAP_TIMEOUT 500
+#else
+#define CAP_TIMEOUT 1            // Milliseconds; This timeout is used to arrange
                                  // that the read not necessarily return immediately
                                  // when a packet is seen. In some OS (such as AIX),
                                  // this parameter does not take effect.
+#endif
+#define GUESS_CAP_LEN 1514
 
 #ifndef IFNAMSIZ
 #define IFNAMSIZ 16
@@ -90,6 +108,77 @@
 #define PROBE_UDP_LEN 8		 // UDP header length 
 #define PROBE_ICMP_LEN 8	 // ICMP header length 
 #define MAX_GATEWAY 9		 // Maximum source route records
+
+#ifndef HAVE_ICMP_STRUCT        // cygwin on Windows don't define ICMP header
+struct icmp 
+{
+    uint8_t icmp_type;      // type of message
+    uint8_t icmp_code;      // type sub code
+    uint16_t icmp_cksum;    // ones complement checksum of struct
+    union 
+    {
+        struct ih_idseq 
+        {
+            uint16_t icd_id;
+            uint16_t icd_seq;
+        } ih_idseq;         // for ICMP_ECHO, ICMP_TSTAMP
+        uint32_t ih_void;   // for ICMP_UNREACH
+    } icmp_hun;
+
+#define icmp_id   icmp_hun.ih_idseq.icd_id
+#define icmp_seq  icmp_hun.ih_idseq.icd_seq
+#define icmp_void icmp_hun.ih_void
+
+    union 
+    {
+        struct 
+        {
+            uint32_t its_otime;
+            uint32_t its_rtime;
+            uint32_t its_ttime;
+        } id_ts;            // for ICMP_TSTAMP
+        struct 
+        {
+            struct ip idi_ip;
+        } id_ip;
+    } icmp_dun;
+#define icmp_otime icmp_dun.id_ts.its_otime
+#define icmp_rtime icmp_dun.id_ts.its_rtime
+#define icmp_ttime icmp_dun.id_ts.its_ttime
+};
+
+#define ICMP_ECHOREPLY          0               /* Echo Reply */
+#define ICMP_UNREACH            3               /* dest unreachable, codes: */
+#define ICMP_REDIRECT           5               /* Redirect (change route) */
+#define ICMP_ECHO               8               /* Echo Request */
+#define ICMP_ROUTERADVERT       9               /* router advertisement */
+#define ICMP_ROUTERSOLICIT      10              /* router solicitation */
+#define ICMP_TIMXCEED           11              /* time exceeded, code: */
+#define ICMP_PARAMPROB          12              /* ip header bad */
+#define ICMP_TSTAMP             13              /* timestamp request */
+#define ICMP_TSTAMPREPLY        14              /* timestamp reply */
+#define ICMP_IREQ               15              /* information request */
+#define ICMP_IREQREPLY          16              /* information reply */
+#define ICMP_MASKREQ            17              /* address mask request */
+#define ICMP_MASKREPLY          18              /* address mask reply */
+
+/* UNREACH codes */
+#define ICMP_UNREACH_NEEDFRAG   4               /* IP_DF caused drop */
+
+/* TIMEXCEED codes */
+#define ICMP_TIMXCEED_INTRANS   0               /* ttl==0 in transit */
+#define ICMP_TIMXCEED_REASS     1               /* ttl==0 in reass */
+
+
+#endif
+
+#ifndef HAVE_ICMP_NEXTMTU
+// Path MTU Discovery (RFC1191)
+struct my_pmtu {
+    u_short ipm_void;
+    u_short ipm_nextmtu;
+};
+#endif
 
 
 extern sigjmp_buf jumpbuf;
@@ -111,6 +200,13 @@ extern u_char tcpopt[TCP_OPT_LEN], ipopt[IP_OPT_LEN];
 extern u_char *optptr;
 extern std::vector<int> protoVec;
 extern std::string captureFunc;
+extern struct sockaddr *Netmask;  // for CYGWIN capture filter in case
+#ifdef _CYGWIN
+extern const u_char EtherLen;
+extern u_char EtherHdr[];	  // for keep the MAC address and type
+extern pcap_t *Sendfp;
+#endif
+extern bool listDevice;
 
 inline int Rand()
 {
@@ -230,6 +326,7 @@ private:
 	}
 
         void print();
+	void list();
     };
 
 public:
@@ -282,10 +379,11 @@ public:
     }
             
             
-    struct deviceInfo *deviceInfoList; // the entry of device linked list
-    void getDeviceInfo() throw(ProbeException);
-    void freeDeviceInfo();
-    void printDeviceInfo();
+    static struct deviceInfo *deviceInfoList; // the entry of device linked list
+    static void getDeviceInfo() throw(ProbeException);
+    static void freeDeviceInfo();
+    static void printDeviceInfo();
+    static void listDeviceInfo();
     void getRouteInfo(const struct in_addr *) throw(ProbeException);
  
 };
@@ -334,38 +432,35 @@ private:
     const std::string DEV;
     const std::string CMD;
     struct bpf_program bpfCode;
-    static ProbePcap* _instance;
-
-protected:
-    ProbePcap(const char *,
-	      const char *) throw(ProbeException);
     
 public:
-    // Singleton
-    static ProbePcap* Instance(const char *,
+    ProbePcap(const char *,
 			       const char *) throw(ProbeException);
 
-    static void resetInstance() {
-	if (_instance) {
-	    delete _instance;
-	    _instance = NULL;
-	}
-    }
-    
     ~ProbePcap() {
+#if 0		 // Because the TCP connect detect will create total
+		 // two captures, if close the first capture, it will
+		 // cause the second capture error in captPkt()
+		 // thread, I haven't found the reason.
+#ifndef _CYGWIN	 // pcap_close will trigger pcap_next error on Windows
 #ifdef HAVE_PCAP_CLOSE
         pcap_close(handle);
 #elif defined HAVE_PCAP_FREECODE
         pcap_freecode(&bpfCode);
 #endif
-	// delete _instance;
-	// _instance = NULL;
+#endif
+#endif
 	// std::cerr << "EXIT PCAP" << std::endl;
+    }
+
+    inline const int getEthLen() const {
+        return ethLen;
     }
 
     const u_char *nextPcap(int *len);
 }; // class ProbePcap
 
+////////////////////////////////////////
 class ProbeSock {
     friend std::ostream& operator<<(std::ostream&,
 				    const ProbeSock&);
@@ -416,7 +511,11 @@ public:
         }
     }
 
-    ssize_t sendPacket(const void *, size_t, int, const struct sockaddr *, socklen_t) throw(ProbeException);
+    ssize_t sendPacket(const void *,
+                       size_t, int,
+                       const struct sockaddr *,
+                       socklen_t) throw(ProbeException);
+
     int sendFragPacket(const u_char *tcpbuf, const int packlen,
 		       const u_char ttl, const int fragsize,
 		       const struct sockaddr *to, socklen_t tolen) throw(ProbeException);
@@ -483,13 +582,6 @@ protected:
     int iphdrLen;
     uint16_t ipid;
 
-#ifndef HAVE_ICMP_NEXTMTU
-    // Path MTU Discovery (RFC1191)
-    struct my_pmtu {
-	u_short ipm_void;
-	u_short ipm_nextmtu;
-    };
-#endif
 }; // class ProbeSock
 
 class IcmpProbeSock: public ProbeSock {

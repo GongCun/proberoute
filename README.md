@@ -6,7 +6,7 @@ proberoute
 Proberoute is a more powerful routing detection tool that provides
 multiple protocols and detection methods.
 
-Proberoute support Mac OS X, AIX, and GNU/Linux, just follow
+Proberoute support Windows, Mac OS X, AIX, and GNU/Linux, just follow
 the [INSTALL](INSTALL) to setup, and run:
 
 	$ sudo proberoute
