@@ -438,11 +438,16 @@ public:
 			       const char *) throw(ProbeException);
 
     ~ProbePcap() {
-#ifndef _CYGWIN 		  // pcap_close will trigger pcap_next error on Windows
+#if 0		 // Because the TCP connect detect will create total
+		 // two captures, if close the first capture, it will
+		 // cause the second capture error in captPkt()
+		 // thread, I haven't found the reason.
+#ifndef _CYGWIN	 // pcap_close will trigger pcap_next error on Windows
 #ifdef HAVE_PCAP_CLOSE
         pcap_close(handle);
 #elif defined HAVE_PCAP_FREECODE
         pcap_freecode(&bpfCode);
+#endif
 #endif
 #endif
 	// std::cerr << "EXIT PCAP" << std::endl;
