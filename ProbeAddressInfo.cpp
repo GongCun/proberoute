@@ -2,6 +2,10 @@
 #include <assert.h>
 #include <errno.h>
 
+// static data member must be defined (exactly once) outside the class body
+struct ProbeAddressInfo::deviceInfo *
+ProbeAddressInfo::deviceInfoList = NULL;
+
 void ProbeAddressInfo::getDeviceInfo() throw(ProbeException)
 {
     int sockfd;
@@ -176,6 +180,16 @@ void ProbeAddressInfo::deviceInfo::print()
     std::cout << "mtu " << mtu << std::endl;
 }
 
+void ProbeAddressInfo::deviceInfo::list()
+{
+    struct sockaddr_in *sinptr;
+
+    sinptr = (struct sockaddr_in *)addr;
+
+    std::cout << name << ' ' << inet_ntoa(sinptr->sin_addr) << std::endl;
+
+    return;
+}
 
 void ProbeAddressInfo::printDeviceInfo()
 {
@@ -184,6 +198,20 @@ void ProbeAddressInfo::printDeviceInfo()
     for (deviceInfoPtr = deviceInfoList; deviceInfoPtr;
          deviceInfoPtr = deviceInfoPtr->next) {
         deviceInfoPtr->print();
+    }
+
+}
+
+void ProbeAddressInfo::listDeviceInfo()
+{
+    int i;
+    struct deviceInfo *deviceInfoPtr;
+
+    for (i = 1, deviceInfoPtr = deviceInfoList;
+	 deviceInfoPtr;
+         deviceInfoPtr = deviceInfoPtr->next, ++i) {
+	std::cout << i << ". ";
+        deviceInfoPtr->list();
     }
 
 }
@@ -262,13 +290,11 @@ ProbeAddressInfo::ProbeAddressInfo(const char *foreignHost, const char *foreignS
     paddr = (struct sockaddr_in *)&localAddr;
     localAddrLen = sizeof(struct sockaddr_in);
 
-    if (localHost == NULL) {
-        if (getsockname(sockfd, &localAddr, &localAddrLen) < 0)
-            throw ProbeException("getsockname");
-    } else {
+    if (getsockname(sockfd, &localAddr, &localAddrLen) < 0)
+        throw ProbeException("getsockname");
+    if (localHost)              // use the given IP instead of detected IP
         if (inet_pton(AF_INET, localHost, &paddr->sin_addr) != 1)
             throw ProbeException("inet_pton error");
-    }
 
     // specify the local port
     if (localPort)

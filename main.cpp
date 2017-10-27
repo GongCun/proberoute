@@ -37,6 +37,7 @@ const u_char EtherLen = 14;
 u_char EtherHdr[64];
 pcap_t *Sendfp = NULL;
 #endif
+bool listDevice = false;
 
 #define printOpt(x) std::cout << #x": " << x << std::endl
 #define printOptStr(x) std::cout << #x": " << nullToEmpty(x) << std::endl
@@ -129,6 +130,9 @@ int main(int argc, char *argv[])
     bool found = false, unreachable = false;
     int code = 0, tcpcode = 0;
 
+    int phyDstLen, phySrcLen;	  // Mac Address Length of destination
+				  // and source.
+
     std::vector<ProbeSock *> probeVec;
     std::vector<ProbeSock *>::iterator probe;
 
@@ -147,30 +151,59 @@ int main(int argc, char *argv[])
 	printOpts();
 
     try {
+
+	if (listDevice) {
+	    ProbeAddressInfo::getDeviceInfo();
+	    ProbeAddressInfo::listDeviceInfo();
+	    ProbeAddressInfo::freeDeviceInfo();
+	    exit(0);
+	}
+
 	ProbeAddressInfo addressInfo(host, service, srcip, srcport, device, mtu);
 	if (verbose > 2)
 	    std::cout << addressInfo << std::endl;
 
-	sinptr = (struct sockaddr_in *)addressInfo.getLocalSockaddr();
-	src = sinptr->sin_addr;
-	sport = ntohs(sinptr->sin_port);
 #ifdef _CYGWIN
-
 	// Since the OS after Windows XP can't send TCP raw data directly, we use
 	// the WinPcap to work around it (use pcap_sendpacket() function), but
 	// must get the destination and source ethernet address first.
 
-	// fill the gatewayMac + localMac + IPtype
-	getmac(inet_ntoa(sinptr->sin_addr), EtherHdr);
+	// Fill the gatewayMac + localMac + IPtype, check whether in
+	// the same sub-network later.
+	phyDstLen = getmac(
+	    addressInfo.getGateway(),
+	    EtherHdr
+	);
+	assert(phyDstLen == 6);
+
+	char *p = (char *)addressInfo.getDevice().c_str();
+	while (*p && *p != '{') // Windows device name begin from brace
+	    ++p;
+	
+	phySrcLen = getmacByDevice(p, EtherHdr + phyDstLen);
+	assert(phySrcLen == 6);
+	
+	// IPv4 type is 0x0800 (IPv6 is 0x86DD, ARP is 0x0806, RARP is
+	// 0x8035, and IEEE 802.1Q tag is 0x8100), we only support the
+	// IPv4 now.
+	p = (char *)EtherHdr + phyDstLen + phySrcLen;
+	*p++ = 0x08;
+	*p = 0x00;
 #endif
+
+	sinptr = (struct sockaddr_in *)addressInfo.getLocalSockaddr();
+	src = sinptr->sin_addr;
+	sport = ntohs(sinptr->sin_port);
 
 	sinptr = (struct sockaddr_in *)addressInfo.getForeignSockaddr();
 	dst = sinptr->sin_addr;
 	dport = ntohs(sinptr->sin_port);
+
 #ifdef _CYGWIN
-	// if the destination in the same sub-network, change the
-	// gatewayMac to destinationMac
-	getarp(inet_ntoa(sinptr->sin_addr), EtherHdr);
+	// If the destination in the same sub-network, change the MAC
+	// address of gateway to destination host (not found is OK).
+	if (getmac(inet_ntoa(sinptr->sin_addr), EtherHdr) == -2)
+	    throw ProbeException("getmac error", MSG);
 
 	if (verbose > 2) {
 	    std::cerr << "Ethernet Frame:\n";
@@ -178,9 +211,7 @@ int main(int argc, char *argv[])
 		std::fprintf(stderr, "%02x ", EtherHdr[i]);
 	    std::putc('\n', stderr);
 	}
-#endif
 
-#ifdef _CYGWIN
 	char errbuf[PCAP_ERRBUF_SIZE];
 	if ((Sendfp = pcap_open(
 		 addressInfo.getDevice().c_str(),
@@ -230,7 +261,7 @@ int main(int argc, char *argv[])
 		
 	static const int signo[] = { SIGHUP, SIGINT, SIGQUIT, SIGTERM };
 	
-	for (i = 0; i < sizeof(signo) / sizeof(int); i++)
+	for (i = 0; i < (int)(sizeof(signo) / sizeof(int)); i++)
 	    if (signal(signo[i], sig_exit) == SIG_ERR)
 		throw ProbeException("signal");
 
@@ -513,12 +544,12 @@ default:
 	// Send the probe and obtain the router/host IP
 	// 
         ProbePcap capture(addressInfo.getDevice().c_str(),
-				      "tcp or "
-				      "icmp[0:1] == 0  or "  // Echo Reply
-				      "icmp[0:1] == 3  or "  // Destination Unreachable
-				      "icmp[0:1] == 11 or "  // Time Exceed
-				      "icmp[0:1] == 12 or "  // Parameter Problem
-				      "icmp[0:1] == 14"	     // Timestamp Reply
+                          "tcp or "
+                          "icmp[0:1] == 0  or "  // Echo Reply
+                          "icmp[0:1] == 3  or "  // Destination Unreachable
+                          "icmp[0:1] == 11 or "  // Time Exceed
+                          "icmp[0:1] == 12 or "  // Parameter Problem
+                          "icmp[0:1] == 14"      // Timestamp Reply
 	);
 
 	bzero(buf, sizeof(buf));
