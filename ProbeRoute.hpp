@@ -181,7 +181,7 @@ struct my_pmtu {
 #endif
 
 
-extern sigjmp_buf jumpbuf;
+extern jmp_buf jumpbuf;
 extern int verbose;
 // extern int protocol;
 extern int srcport;
