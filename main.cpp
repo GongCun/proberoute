@@ -6,7 +6,7 @@
 #include <signal.h>
 #endif
 
-sigjmp_buf jumpbuf, winjump;
+jmp_buf jumpbuf;
 int verbose;
 int srcport;
 const char *device;
@@ -564,6 +564,7 @@ default:
                    })
 	) {
             int savecode = 0;
+            bzero(&lastrecv, sizeof(lastrecv));
             
             std::printf("%3d ", ttl);
 	    for (i = 0; i < nquery; i++) {
@@ -639,7 +640,7 @@ default:
                 
 		alarm(waittime);
 
-		if (sigsetjmp(jumpbuf, 1) != 0) {
+		if (setjmp(jumpbuf) != 0) {
 		    std::cout << " *";
 		    alarm(0);
 		    continue;
