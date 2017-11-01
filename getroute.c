@@ -47,7 +47,7 @@ struct RouteInfo *GetRouteInfo(void)
         return NULL;
     }
 
-    if (GetIpForwardTable(pIpForwardTable, &dwSize, 0) ==
+    if (GetIpForwardTable(pIpForwardTable, &dwSize, 1) ==
         ERROR_INSUFFICIENT_BUFFER) {
         pIpForwardTable = (MIB_IPFORWARDTABLE *) malloc(dwSize);
         if (pIpForwardTable == NULL) {
