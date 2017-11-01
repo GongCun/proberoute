@@ -733,7 +733,7 @@ void ProbeAddressInfo::getRouteInfo(const struct in_addr *addr) throw(ProbeExcep
 	    )
 		throw ProbeException("inet_ntop");
 
-	    break;
+	    // Don't break until find the last corresponding route
 	}
     }
 
