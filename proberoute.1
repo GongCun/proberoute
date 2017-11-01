@@ -1,4 +1,4 @@
-.TH "proberoute" "1" "09 Oct 2017" "" ""
+.TH "proberoute" "1" "28 Oct 2017" "" ""
 .SH "NAME"
 \fBproberoute\fP \- Prints the route that IP packets take to a network host with \
 multiple protocols and detection methods.
@@ -408,7 +408,7 @@ advanced options for firewall evasion or spoofing under the permission
 from the network administrator\&.
 .PP
 .SH FILES
-Proberoute relies on \fBlibpcap\fP library, which provide common
+Proberoute relies on \fBLibPcap\fP library, which provide common
 methods to access the datalink layer by wrapping the BSD Packet Filter
 (BPF), the Linux PF_PACKET interface, or other methods.
 .PP
@@ -418,7 +418,7 @@ methods to access the datalink layer by wrapping the BSD Packet Filter
 Description
 .IP /usr/lib/libpcap.a
 .br
-libpcap library file
+LibPcap library file
 .IP /dev/bpf?
 BPF device
 .br
@@ -431,7 +431,7 @@ traceroute(8), nmap(1), ping(1)
 .PP
 .SH "SECURITY"
 This command requires privileged users due to using
-\fBlibpcap\fP/\fBWinPcap\fP and raw socket\&.
+\fBLibPcap\fP/\fBWinPcap\fP and raw socket\&.
 .PP
 When used properly, Proberoute helps to detect the routing problems and
 location errors\&. But when used improperly, Proberoute could (in rare
@@ -467,6 +467,11 @@ https://github.com/GongCun/proberoute, it's very much welcome to
 participate in the development and help to improve Proberoute\&.
 .PP
 .SH BUGS
+The round-trip times between the router or the target host depends on
+the time the packet is captured, rather than the actual round-trip
+time, such as the delay of 500 ms on the Windows system due to the
+delay of \fBWinPcap\fP.
+.PP
 The following is a list of those features not yet implemented:
 .PD 0
 .IP *
@@ -492,7 +497,7 @@ Since I have no environment to test these link types such as IEEE
 etc\&., so there may be BUGs hidden in them\&.
 .PP
 Because of IPsec with Authentication Header (AH) or Encapsulating
-Security Payload (ESP) can not be captured by \fBlibpcap\fP,
+Security Payload (ESP) can not be captured by \fBLibPcap\fP,
 Proberoute implements the \fBrecvfrom(2)\fP for capturing the ICMP Raw
 Socket to work around it, use \fB\-vvvv\fP flags can watch which
 capture catch the packet\&.
