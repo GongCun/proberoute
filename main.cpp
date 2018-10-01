@@ -6,7 +6,7 @@
 #include <signal.h>
 #endif
 
-jmp_buf jumpbuf;
+sigjmp_buf jumpbuf;
 int verbose;
 int srcport;
 const char *device;
@@ -82,6 +82,12 @@ static void printOpts()
     printProto();
     std::cout << std::endl;
 	    
+    if (getenv("PROBE_RECV"))
+        captureFunc = "recv()";
+    else
+        captureFunc = "pcap()";
+    printOpt(captureFunc);
+
     printOpt(srcport);
     printOptStr(device);
     printOpt(nquery);
@@ -131,7 +137,9 @@ int main(int argc, char *argv[])
     int code = 0, tcpcode = 0;
 
     int phyDstLen, phySrcLen;	  // Mac Address Length of destination
-				  // and source.
+                                // and source.
+
+    static ProbePcap *capture;
 
     std::vector<ProbeSock *> probeVec;
     std::vector<ProbeSock *>::iterator probe;
@@ -321,7 +329,7 @@ int main(int argc, char *argv[])
 			// the write() packet arriving to remote host, we need to set the
 			// TTL to 1.
 
-			ProbePcap capture(addressInfo.getDevice().c_str(), "tcp");
+            capture = ProbePcap::Instance(addressInfo.getDevice().c_str(), "tcp");
 
 			optlen = sizeof(origttl);
 			if (getsockopt(connfd, IPPROTO_IP, IP_TTL, &origttl, &optlen) < 0)
@@ -336,7 +344,7 @@ int main(int argc, char *argv[])
 		    
 			// capture the write() packet immediately or when it retransmit
 			for ( ; ; ) {
-			    ptr = capture.nextPcap(&caplen);
+			    ptr = capture->nextPcap(&caplen);
 			    assert(ptr);
 			    if (TcpProbeSock::capWrite(
 				    ptr,
@@ -543,7 +551,8 @@ default:
 	//
 	// Send the probe and obtain the router/host IP
 	// 
-        ProbePcap capture(addressInfo.getDevice().c_str(),
+        ProbePcap::resetInstance();
+        capture = ProbePcap::Instance(addressInfo.getDevice().c_str(),
                           "tcp or "
                           "icmp[0:1] == 0  or "  // Echo Reply
                           "icmp[0:1] == 3  or "  // Destination Unreachable
@@ -650,7 +659,7 @@ default:
 
                 msg = "";
 		for ( ; ; ) {
-		    ptr = capture.nextPcap(&caplen);
+		    ptr = capture->nextPcap(&caplen);
 		    assert(ptr != NULL);
 		    // std::cerr << "!! caplen = " << caplen << std::endl;
 		    
@@ -803,11 +812,9 @@ default:
 
                 if (!s.empty()) s.insert(0, "  ");
                 if (!msg.empty()) msg += " ";
-                captureFunc.insert(0, "by "), captureFunc += " ";
 
-                std::printf("%s  %s%s%.3f ms", s.c_str(),
-                            (verbose > 2) ? msg.c_str() : "",
-                            (verbose > 3) ? captureFunc.c_str() : "", rtt);
+                std::printf("%s  %s%.3f ms", s.c_str(),
+                            (verbose > 2) ? msg.c_str() : "", rtt);
 	    }
 	    std::cout << std::endl;
 
