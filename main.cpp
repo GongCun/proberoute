@@ -649,7 +649,7 @@ default:
                 
 		alarm(waittime);
 
-		if (setjmp(jumpbuf) != 0) {
+		if (sigsetjmp(jumpbuf, 1) != 0) {
 		    std::cout << " *";
 		    alarm(0);
 		    continue;

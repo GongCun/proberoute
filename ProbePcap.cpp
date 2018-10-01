@@ -206,6 +206,9 @@ const u_char *ProbePcap::captPkt(int *len) throw(ProbeException)
         if (res == -1) {
             throw ProbeException("pcap_next_ex", pcap_geterr(handle));
         }
+        else
+            ;
+        // std::fprintf(stderr, "res = %d\n", res);
     }
 #else
     while ((ptr = pcap_next(handle, &hdr)) == NULL) ;
