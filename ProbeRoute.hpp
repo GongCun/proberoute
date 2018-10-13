@@ -109,7 +109,11 @@ extern "C" {
 #define PROBE_ICMP_LEN 8	 // ICMP header length 
 #define MAX_GATEWAY 9		 // Maximum source route records
 
-#ifndef HAVE_ICMP_STRUCT        // cygwin on Windows don't define ICMP header
+#ifndef UINT_MAX
+#define UINT_MAX (4294967295U)	 // Maximum of sequence#
+#endif
+
+#ifndef HAVE_ICMP_STRUCT         // cygwin on Windows don't define ICMP header
 struct icmp 
 {
     uint8_t icmp_type;      // type of message
@@ -181,7 +185,7 @@ struct my_pmtu {
 #endif
 
 
-extern jmp_buf jumpbuf;
+extern sigjmp_buf jumpbuf;
 extern int verbose;
 // extern int protocol;
 extern int srcport;
@@ -207,6 +211,14 @@ extern u_char EtherHdr[];	  // for keep the MAC address and type
 extern pcap_t *Sendfp;
 #endif
 extern bool listDevice;
+extern bool tcpIsNull;
+extern bool simulate;
+extern bool reverse;
+extern bool hostreach;
+extern bool interact;
+extern uint16_t capwin;
+extern int distance;
+extern bool do_retransmit;
 
 inline int Rand()
 {
@@ -309,24 +321,24 @@ private:
 
     // the device information element
     struct deviceInfo {
-        std::string name;               // interface name
-        u_short mtu;			// interface MTU
-        short flags;                    // IFF_xxx constants from <net/if.h>
-        struct sockaddr *addr;          // primary address
-        struct sockaddr *brdaddr;       // broadcast address
+        std::string name;         // interface name
+        u_short mtu;              // interface MTU
+        short flags;              // IFF_xxx constants from <net/if.h>
+        struct sockaddr *addr;    // primary address
+        struct sockaddr *brdaddr; // broadcast address
         struct sockaddr *netmask;	// netmask address
         struct sockaddr *dstaddr;	// point-to-point destination address
-        struct deviceInfo *next;        // next of these structures
+        struct deviceInfo *next;  // next of these structures
         deviceInfo(): name(""), mtu(0), flags(0),
                       addr(NULL), brdaddr(NULL), netmask(NULL),
-		      dstaddr(NULL),
+                      dstaddr(NULL),
                       next(NULL) {}
-	~deviceInfo() {
-	    safeFree(addr); safeFree(brdaddr); safeFree(netmask);
-	}
+        ~deviceInfo() {
+            safeFree(addr); safeFree(brdaddr); safeFree(netmask);
+        }
 
         void print();
-	void list();
+        void list();
     };
 
 public:
@@ -418,12 +430,6 @@ inline std::ostream& operator<<(std::ostream &output,
     return output;
 }
 
-extern "C" {
-    // thread functions for capture the packets
-    void *recvPkt(void *);
-    void *captPkt(void *);
-}
-
 class ProbePcap {
 private:
     pcap_t *handle;
@@ -432,32 +438,43 @@ private:
     const std::string DEV;
     const std::string CMD;
     struct bpf_program bpfCode;
+    static ProbePcap* _instance;
+
+    const u_char *recvPkt(int *len) throw(ProbeException);
+    const u_char *captPkt(int *len) throw(ProbeException);
     
-public:
+protected:
     ProbePcap(const char *,
-			       const char *) throw(ProbeException);
+              const char *) throw(ProbeException);
+
+public:
+    // singleton
+    static ProbePcap* Instance(const char *,
+                               const char *) throw(ProbeException);
+
+    static void resetInstance() {
+        if (_instance) {
+            delete _instance;
+            _instance = NULL;
+        }
+    }
 
     ~ProbePcap() {
-#if 0		 // Because the TCP connect detect will create total
-		 // two captures, if close the first capture, it will
-		 // cause the second capture error in captPkt()
-		 // thread, I haven't found the reason.
 #ifndef _CYGWIN	 // pcap_close will trigger pcap_next error on Windows
 #ifdef HAVE_PCAP_CLOSE
         pcap_close(handle);
-#elif defined HAVE_PCAP_FREECODE
+#endif
+#ifdef HAVE_PCAP_FREECODE
         pcap_freecode(&bpfCode);
 #endif
 #endif
-#endif
-	// std::cerr << "EXIT PCAP" << std::endl;
     }
 
     inline const int getEthLen() const {
         return ethLen;
     }
 
-    const u_char *nextPcap(int *len);
+    const u_char *nextPcap(int *len) throw(ProbeException);
 }; // class ProbePcap
 
 ////////////////////////////////////////

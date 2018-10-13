@@ -16,5 +16,5 @@ Happy hacking!
 Thanks for wanting to help make proberoute better! Please
 submit BUG report or any idea to &lt;gong_cun@bocmacau.com&gt;
 
-Please read more on details in [illustrated](proberoute.pdf)
-or [manual](proberoute_man.pdf).
+Please read more on details in [illustrated](doc/proberoute.pdf)
+or [manual](doc/proberoute_man.pdf).
