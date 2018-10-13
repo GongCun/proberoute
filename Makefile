@@ -83,13 +83,14 @@ usage.h: usage.txt
 install: $(PROGS) $(PROGS).1
 	$(install-func)
 
-man: $(PROGS)_man.pdf
+man: doc/$(PROGS)_man.pdf
 
-$(PROGS)_man.pdf: $(PROGS).1
+doc/$(PROGS)_man.pdf: $(PROGS).1
+	@mkdir -p doc
 	$(if $(filter AIX,$(OS)),\
-	troff -man -Tpsc <$< | psc >$(PROGS).ps,\
-	groff -man -Tps <$< >$(PROGS).ps)
-	ps2pdf $(PROGS).ps $@
+	troff -man -Tpsc <$< | psc >doc/$(PROGS).ps,\
+	groff -man -Tps <$< >doc/$(PROGS).ps)
+	cd doc && ps2pdf $(PROGS).ps $@
 
 ifeq (CYGWIN, $(OS))
   # copy the DLL file to build folder

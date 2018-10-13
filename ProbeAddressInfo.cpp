@@ -290,8 +290,8 @@ ProbeAddressInfo::ProbeAddressInfo(const char *foreignHost, const char *foreignS
     paddr = (struct sockaddr_in *)&localAddr;
     localAddrLen = sizeof(struct sockaddr_in);
 
-    if (getsockname(sockfd, &localAddr, &localAddrLen) < 0)
-        throw ProbeException("getsockname");
+        if (getsockname(sockfd, &localAddr, &localAddrLen) < 0)
+            throw ProbeException("getsockname");
     if (localHost)              // use the given IP instead of detected IP
         if (inet_pton(AF_INET, localHost, &paddr->sin_addr) != 1)
             throw ProbeException("inet_pton error");
@@ -733,7 +733,7 @@ void ProbeAddressInfo::getRouteInfo(const struct in_addr *addr) throw(ProbeExcep
 	    )
 		throw ProbeException("inet_ntop");
 
-	    break;
+	    // Don't break until find the last corresponding route
 	}
     }
 

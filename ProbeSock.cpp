@@ -2,7 +2,17 @@
 #include <assert.h>
 #include <errno.h>
 
+static int get_distance(int ttl)
+{
+    
+    int i = 1;
+    while (i - ttl < 0)
+	i *= 2;
 
+    return i - ttl;
+}
+
+        
 int ProbeSock::openSock(const int protocol) throw(ProbeException)
 {
     int rawfd;
@@ -173,9 +183,12 @@ int TcpProbeSock::buildProtocolHeader(
     tcp->th_off = tcphdrLen >> 2;
     tcp->th_flags = tcpflags;
     tcp->th_urp = (tcpflags & TH_URG && protoLen - tcphdrLen) ?
-                  htons(1) : 0;   // urgent pointer
-    tcp->th_win = htons(MAX_MTU); // default 65535
-    tcp->th_sum = 0;              // calculate later
+                  htons(1) : 0;		// urgent pointer
+    if (capwin)
+	tcp->th_win = htons(capwin);
+    else
+	tcp->th_win = htons(MAX_MTU);	// default 65535
+    tcp->th_sum = 0;			// calculate later
 
     if (tcphdrLen > PROBE_TCP_LEN) {
         assert(tcphdrLen - PROBE_TCP_LEN == tcpoptLen);
@@ -184,7 +197,10 @@ int TcpProbeSock::buildProtocolHeader(
     }
     
     if (badsum) {
-        tcp->th_sum = (u_short)Rand() & 0xffff;
+	if (getenv("CHECKSUM_ZERO"))
+	    tcp->th_sum = (u_short)0x0000 & 0xffff;
+	else
+	    tcp->th_sum = (u_short)Rand() & 0xffff;
     } else {
         sum = in_checksum((uint16_t *)&srcAddr, 4);
         sum += in_checksum((uint16_t *)&dstAddr, 4);
@@ -308,6 +324,9 @@ int ProbeSock::recvIcmp(const u_char *buf, const int len)
             
         }
 
+	if (reverse)
+	    distance = get_distance(ip->ip_ttl);
+	
         return ((type == ICMP_TIMXCEED) ? -1 : code + 1);
     }
 
@@ -357,6 +376,7 @@ bool TcpProbeSock::capWrite(
         ipid = ntohs(ip->ip_id);
         seq = ntohl(tcp->th_seq);
         ack = ntohl(tcp->th_ack);
+	capwin = ntohs(tcp->th_win);
         if ((ipoptlen = iplen - PROBE_IP_LEN) > 0) {
             memcpy(ipopt, (u_char *)ip + PROBE_IP_LEN, ipoptlen);
         }
@@ -370,7 +390,7 @@ bool TcpProbeSock::capWrite(
     
 }
 
-   
+
 int TcpProbeSock::recvTcp(const u_char *buf, int len)
 {
     //
@@ -384,7 +404,7 @@ int TcpProbeSock::recvTcp(const u_char *buf, int len)
     const struct ip *ip;
     const struct tcphdr *tcp;
     int iplen, tcplen;
-
+    
     ip = (struct ip *)buf;
     iplen = ip->ip_hl << 2;
 
@@ -400,7 +420,8 @@ int TcpProbeSock::recvTcp(const u_char *buf, int len)
         return 0;
 
     // TCP RFC 793 (Page 65) 
-    if (tcp->th_sport == htons(dport) &&
+    if (
+	tcp->th_sport == htons(dport) &&
         tcp->th_dport == htons(sport) &&
         (
             // Send SYN packet when state is listen.
@@ -409,13 +430,26 @@ int TcpProbeSock::recvTcp(const u_char *buf, int len)
             // when state is closed/listen.
             (ntohl(tcp->th_seq) == tcpack && tcp->th_flags & TH_RST) ||
             // Send out-of-order SEQ when state is established.
-            (ntohl(tcp->th_ack) == tcpseq - 1)
-        ))
-        return (tcp->th_flags & TH_RST) ? 1 : 2;
+            (ntohl(tcp->th_ack) == tcpseq - 1) ||
+            // Send order SEQ when state is established.
+	    (ntohl(tcp->th_ack) == tcpseq + pmtu - ipoptLen - tcpoptLen - 40) ||
+	    // TCP Keep-Alive or ACK (Maybe DUP ACK)
+            ntohl(tcp->th_ack) >= tcpseq
+        )
+    )
+	{
+	    if (reverse) {
+		hostreach = true;
+		distance = get_distance(ip->ip_ttl);
+	    }
+	    
+	    return (tcp->th_flags & TH_RST) ? 1 : 2;
+	}
 
     return 0;
 }
-        
+
+
 int TcpProbeSock::nonbConn(int fd, const struct sockaddr *addr, socklen_t addrlen,
                            int nsec, unsigned long msec)
 {
@@ -499,7 +533,10 @@ int UdpProbeSock::buildProtocolHeader(
     udp->uh_sum = 0;              // calculate later
 
     if (badsum) {
-        udp->uh_sum = (u_short)Rand() & 0xffff;
+	if (getenv("CHECKSUM_ZERO"))
+	    udp->uh_sum = (u_short)0x0000 & 0xffff;
+	else
+	    udp->uh_sum = (u_short)Rand() & 0xffff;
     } else {
         sum = in_checksum((uint16_t *)&srcAddr, 4);
         sum += in_checksum((uint16_t *)&dstAddr, 4);
@@ -548,7 +585,10 @@ int IcmpProbeSock::buildProtocolHeader(
     }
 
     if (badsum) {
-        icmp->icmp_cksum = (u_short)Rand() & 0xffff;
+	if (getenv("CHECKSUM_ZERO"))
+	    icmp->icmp_cksum = (u_short)0x0000 & 0xffff;
+	else
+	    icmp->icmp_cksum = (u_short)Rand() & 0xffff;
     } else {
         sum = in_checksum((uint16_t *)icmp, protoLen);
         icmp->icmp_cksum = CKSUM_CARRY(sum);
@@ -713,6 +753,9 @@ int UdpProbeSock::recvIcmp(const u_char *buf, const int len)
                 pmtu = *mtuptr++;
             
         }
+
+	if (reverse)
+	    distance = get_distance(ip->ip_ttl);
 
         return ((type == ICMP_TIMXCEED) ? -1 : code + 1);
     }

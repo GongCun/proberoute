@@ -13,12 +13,15 @@ const char *device;
 int nquery = 3;
 int waittime = 3;
 int firstttl = 1, maxttl = 30;
+int distance;
 int fragsize;
 int mtu;
 int conn;
 int badsum, badlen;
 const char *host, *service, *srcip;
-u_char tcpFlags = TH_SYN;
+// u_char tcpFlags = TH_SYN;
+u_char tcpFlags = 0;
+bool tcpIsNull = false;
 u_char icmpFlags = ICMP_ECHO;
 std::vector<int> protoVec;
 std::string captureFunc = "unknown capture";
@@ -38,12 +41,21 @@ u_char EtherHdr[64];
 pcap_t *Sendfp = NULL;
 #endif
 bool listDevice = false;
+bool simulate = false;
+bool reverse = false;
+bool havereach = false;
+bool hostreach = false;
+bool interact = false;
+uint16_t capwin = 0;
+bool do_retransmit = false;
+uint32_t retransmit = UINT_MAX;
 
 #define printOpt(x) std::cout << #x": " << x << std::endl
 #define printOptStr(x) std::cout << #x": " << nullToEmpty(x) << std::endl
 
 static void sig_exit(int signo)
 {
+    Close();
     exit(1);
 }
 
@@ -126,18 +138,19 @@ int main(int argc, char *argv[])
     const struct ip *ip;
     struct sockaddr_in *sinptr;
     struct in_addr src, dst, lastrecv;
-    struct timeval tv;
+    struct timeval tv, tcp_now;
     double rtt;
     int caplen, len, iplen = 0, tcplen = 0, packlen;
     u_short sport, dport;
     uint16_t ipid = (u_short)Rand() & 0xffff;
     uint32_t seq = 0, ack = 0;
+    int count = 0;
     u_char buf[MAX_MTU];
     bool found = false, unreachable = false;
     int code = 0, tcpcode = 0;
 
-    int phyDstLen, phySrcLen;	  // Mac Address Length of destination
-                                // and source.
+    int phyDstLen, phySrcLen;	// Mac Address Length of destination and source.
+    int savecode = 0;
 
     static ProbePcap *capture;
 
@@ -147,6 +160,8 @@ int main(int argc, char *argv[])
     // make std::cout and stdout unbuffered
     std::cout.setf(std::ios::unitbuf);
     setbuf(stdout, NULL);
+
+    bzero(buf, sizeof(buf));
 
     if (parseOpt(argc, argv, msg) < 0) {
         if (!msg.empty())
@@ -303,6 +318,13 @@ int main(int argc, char *argv[])
                     if (setsockopt(connfd, SOL_SOCKET, SO_REUSEPORT, &on, sizeof(on)) < 0)
                         throw ProbeException("setsockopt SO_REUSEPORT");
 #endif
+
+		    if (reverse) {
+			ttl = maxttl;
+			if (setsockopt(connfd, IPPROTO_IP, IP_TTL, &ttl, sizeof(ttl)) < 0)
+			    throw ProbeException("setsockopt IP_TTL");
+		    }
+		    
                     // Bind local address and specified port
                     if (bind(connfd, addressInfo.getLocalSockaddr(),
                              addressInfo.getLocalSockaddrLen()) < 0)
@@ -325,6 +347,7 @@ int main(int argc, char *argv[])
                                   << ")" << std::endl;
 
                     if (n == 0) {
+
                         // Capture the write() packet, then set the seq & ack.  To avoid
                         // the write() packet arriving to remote host, we need to set the
                         // TTL to 1.
@@ -335,14 +358,16 @@ int main(int argc, char *argv[])
                         if (getsockopt(connfd, IPPROTO_IP, IP_TTL, &origttl, &optlen) < 0)
                             throw ProbeException("getsockopt IP_TTL");
 
-                        ttl = 1;
-                        if (setsockopt(connfd, IPPROTO_IP, IP_TTL, &ttl, sizeof(ttl)) < 0)
-                            throw ProbeException("setsockopt IP_TTL");
+			if (!simulate) {
+			    ttl = 1;
+			    if (setsockopt(connfd, IPPROTO_IP, IP_TTL, &ttl, sizeof(ttl)) < 0)
+				throw ProbeException("setsockopt IP_TTL");
+			}
 
-                        if (write(connfd, "\xa5", 1) != 1)
-                            throw ProbeException("write");
-		    
-                        // capture the write() packet immediately or when it retransmit
+			// capture the write() packet immediately or when it retransmit
+			if (write(connfd, "\x00", 1) != 1)
+			    throw ProbeException("write");
+
                         for ( ; ; ) {
                             ptr = capture->nextPcap(&caplen);
                             assert(ptr);
@@ -362,9 +387,56 @@ int main(int argc, char *argv[])
                                 break;
                         }
 
+
+			if (gettimeofday(&tcp_now, NULL) < 0)
+			    throw ProbeException("gettimeofday");
+
+			if (interact) {
+			    std::string readline;
+
+			    if (verbose > 2) {
+				std::cerr << "first captured ipid: " << ipid
+					  << " seq: " << seq
+					  << " ack: " << ack << std::endl;
+			    }
+
+			    std::cout << std::endl;
+			    std::cout << "Interactive mode, press Ctrl-D to end" << std::endl;
+
+			    while (std::getline(std::cin, readline)) {
+				if (write(connfd, "\x00", 1) != 1)
+				    throw ProbeException("write");
+				count++;
+				std::printf("<sent the %d%s packet>\n", count,
+					    count == 1 ? "st" :
+					    count == 2 ? "nd" :
+					    count == 3 ? "rd" : "th");
+			    }
+			    std::cin.clear();
+
+			    if (do_retransmit) {
+				std::cout << "\nPlease enter the packet# to retransmit: ";
+				std::cin >> retransmit;
+			    }
+
+			} // end of interact
+
+			if (do_retransmit) {
+			    if (retransmit > count)
+				retransmit = count;
+			    seq += retransmit;
+
+			    if (verbose > 2)
+				std::cerr << "\nretransmit seq#: " << seq << std::endl;
+			}
+			else {
+			    // set order byte sequence
+			    ++ipid, seq += count + 1;
+			}
+
                         if (verbose > 2) {
                             std::cerr << "captured ipid: " << ipid
-                                      << " seq: " << seq
+                                      << " set seq: " << seq
                                       << " ack: " << ack << std::endl;
 
                             fprintf(stderr, "captured ipopt (%d): ", iplen);
@@ -376,11 +448,27 @@ int main(int argc, char *argv[])
                             for (i = 0; i < tcplen; i++)
                                 std::fprintf(stderr, "%02x ", tcpopt[i]);
                             std::fprintf(stderr, "%s\n", tcplen ? "" : "null");
-                        }
 
-                        // set out-of-order sequence
-                        ++ipid, ++seq;
-                    }
+                        } // verbose
+
+			if (tcplen == 12 && ntohs(tcpopt[2]) == 8) {
+			    uint32_t *p;
+			    p = (uint32_t *)(tcpopt + 4);
+			    if (verbose > 2)
+				std::fprintf(stderr, "TSval(original): %ld\n", ntohl(*p));
+
+			    // The timestamp increases by 1 per 500 ms.
+			    uint32_t tsval = htonl(ntohl(*p) + delta(&tcp_now) / 500);
+			    memcpy(tcpopt + 4, (u_char *)&tsval, 4);
+			    p = (uint32_t *)(tcpopt + 4);
+			    if (verbose > 2)
+				std::fprintf(stderr, "TSval(changed): %ld\n", ntohl(*p));
+				
+			    p = (uint32_t *)(tcpopt + 8);
+			    if (verbose > 2)
+				std::fprintf(stderr, "TSecr: %ld\n", ntohl(*p));
+			} // set TSval
+                    }	  // nonbConn succeed
                     else if (n > 0) {
                         // connection refused or timed out
                         if (verbose)
@@ -561,19 +649,24 @@ int main(int argc, char *argv[])
                                       "icmp[0:1] == 14"      // Timestamp Reply
         );
 
-        bzero(buf, sizeof(buf));
+        // bzero(buf, sizeof(buf));
 
         mtu = addressInfo.getDevMtu();
-        for (ttl = firstttl;
-             ttl <= maxttl;
-             ++ttl,
-                   ({
-                       for (probe = probeVec.begin(); probe != probeVec.end(); ++probe)
-                           ++(**probe);
-                   })
-        ) {
-            int savecode = 0;
-            bzero(&lastrecv, sizeof(lastrecv));
+        for (
+	    distance = maxttl,
+	    ttl = (reverse ? maxttl : firstttl);
+	    reverse ? (ttl >= firstttl) : (ttl <= maxttl); 
+            (reverse ? --ttl : ++ttl),
+		  ({
+		      for (probe = probeVec.begin(); probe != probeVec.end(); ++probe)
+			  ++(**probe);
+		  })
+	) {
+	    if (hostreach)
+		havereach = true;
+
+	    while (ttl > distance)
+		--ttl;
             
             std::printf("%3d ", ttl);
             for (i = 0; i < nquery; i++) {
@@ -673,6 +766,7 @@ int main(int argc, char *argv[])
                         }
                             
                         
+			if (!havereach) {
                         if ((*probe)->getProtocol() == IPPROTO_TCP) {
                             if (TcpProbeSock *tcpProbe = dynamic_cast<TcpProbeSock *>(*probe)) {
                                 if (tcpcode = tcpProbe->recvTcp(ptr, caplen)) {
@@ -684,6 +778,8 @@ int main(int argc, char *argv[])
                                 throw std::bad_cast();
                             }
                         }
+			}
+			
                     }
                 }
               endWait:
@@ -818,47 +914,74 @@ int main(int argc, char *argv[])
             }
             std::cout << std::endl;
 
+	    
             if (found || unreachable) {
-                for (probe = probeVec.begin();
-                     probe != probeVec.end() && (*probe)->getProtocol() != IPPROTO_TCP;
-                     ++probe)
-                    ;
-                
-                if (probe != probeVec.end() && savecode) {
-                    TcpProbeSock *tcpProbe = dynamic_cast<TcpProbeSock *>(*probe);
-                    if (!tcpProbe)
-                        throw std::bad_cast();
-                    assert(dport == tcpProbe->getTcpDstPort());
-		    
-                    dport = tcpProbe->getTcpDstPort();
-		    
-                    if (connfd >= 0)
-                        std::cout << "Port " << dport << " open" << std::endl;
-                    else if (conn)
-                        std::cout << "Port " << dport << " closed" << std::endl;
-                    else {
-                        switch (savecode) {
-                        case 1:
-                            if (tcpFlags == TH_SYN)
-                                std::cout << "Port " << dport << " closed" << std::endl;
-                            else
-                                std::cout << "Port " << dport << " closed/filtered" << std::endl;
-                            break;
-
-                        case 2:
-                            std::cout << "Port " << dport << " open" << std::endl;
-                            break;
-
-                        default:
-                            // Target host may sent the ICMP or UDP packet, so
-                            // can't get the TCP state.
-                            std::cout << "Port " << dport << " state unknown" << std::endl;
-                        }
-                    }
-                }
-                break;
-            }
+		if (!reverse)
+		    break;
+	    }
         }
+
+	if (found || unreachable) {
+	    for (probe = probeVec.begin();
+		 probe != probeVec.end() && (*probe)->getProtocol() != IPPROTO_TCP;
+		 ++probe)
+		;
+                
+	    if (probe != probeVec.end() && savecode) {
+		TcpProbeSock *tcpProbe = dynamic_cast<TcpProbeSock *>(*probe);
+		if (!tcpProbe)
+		    throw std::bad_cast();
+		assert(dport == tcpProbe->getTcpDstPort());
+		    
+		dport = tcpProbe->getTcpDstPort();
+		    
+		if (connfd >= 0) {
+		    if (verbose > 3)
+			std::cerr << "closing connfd " << connfd << std::endl;
+
+		    if (simulate) {
+
+			// Send the previously sent cheat bytes through the
+			// normal write() to prevent both sides from
+			// continuing to send ack to each other so that they
+			// can't close.
+			    
+			bzero(buf, sizeof(buf));
+			int val = tcpProbe->getPmtu() -
+				  tcpProbe->getIphdrLen() -
+				  tcpProbe->getProtocolHdrLen();  
+			
+			if (write(connfd, buf, val) != val)
+			    throw ProbeException("write");
+		    }
+
+		    close(connfd);
+		    std::cout << "Port " << dport << " open" << std::endl;
+		}
+		    
+		else if (conn)
+		    std::cout << "Port " << dport << " closed" << std::endl;
+		else {
+		    switch (savecode) {
+		    case 1:
+			if (tcpFlags == TH_SYN)
+			    std::cout << "Port " << dport << " closed" << std::endl;
+			else
+			    std::cout << "Port " << dport << " closed/filtered" << std::endl;
+			break;
+
+		    case 2:
+			std::cout << "Port " << dport << " open" << std::endl;
+			break;
+
+		    default:
+			// Target host may sent the ICMP or UDP packet, so
+			// can't get the TCP state.
+			std::cout << "Port " << dport << " state unknown" << std::endl;
+		    }
+		}
+	    }
+	}
 
         for (probe = probeVec.begin(); probe != probeVec.end(); ++probe)
             delete *probe;
@@ -881,12 +1004,19 @@ int main(int argc, char *argv[])
     
 static void Close()
 {
+    // std::cerr << "connfd = " << connfd << " origttl = " << origttl << std::endl;
     if (connfd >= 0 && origttl > 0) {
-        // std::cerr << "connfd = " << connfd << " origttl = " << origttl << std::endl;
         // Resume the original TTL to ensure that we can discard the
         // connection successfully.
-        setsockopt(connfd, IPPROTO_IP, IP_TTL, &origttl, sizeof(origttl));
-        close(connfd);
+	// Fix me: An error of EINVAL will occur if the write() packets does not
+        // reach the destination.
+        if (setsockopt(connfd, IPPROTO_IP, IP_TTL, &origttl, sizeof(origttl) < 0))
+	    ;
+	    // std::perror("setsockopt connfd");
+
+        if (close(connfd) < 0)
+	    ;
+	    // std::perror("close connfd");
     }
 }
 	

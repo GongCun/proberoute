@@ -333,7 +333,34 @@ disabled source routing for security reasons)\&.
 .TP \w'names'u+4
 .B \-l, \-\-list
 Print the list of the network interface avaiable on the system, but
-Proberoute can't sniff loopback packets on Windows system.
+Proberoute can't sniff loopback packets on Windows system\&.
+.TP \w'names'u+4
+.B \-\-simulate
+When the connection is established, to detect the route by
+sending a order bye packet, which must be used with \fB\-\-conn\fP option\&.
+.TP \w'names'u+4
+.B \-\-reverse
+Set the TTL of the probe packet decreased from large to
+small. Used to evade the Cisco ASA firewall
+\fBttl\-evasion\-protection\fP policy\&.
+
+.TP \w'names'u+4
+.B \-\-retransmit
+Retransmit the specified packet in interactive mode, should be
+used with \fB\-\-conn\fP and \fB\-\-interact\fP option\&. Note:
+retransmit the last packet received by the other side will be
+considered as the TCP keepalive probe\&.
+
+.TP \w'names'u+4
+.B \-\-interact
+When the connection is established, control the frequency of sending
+bytes through this option. Each time a line read from stdin, sends a
+\&"\\x00\&" byte by \fBwrite()\fP \&. This option can be used with
+\fItcpdump\fP and Unix \fIdiscard\fP service\&. For example,
+asymmetric routing will cause network rejection due to
+non-synchronization of TCP sessions, this option can be used to
+send probe packets when retransmission occurs\&.
+
 .PP
 .SH "PARAMETERS"
 .PP

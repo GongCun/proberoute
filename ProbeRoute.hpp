@@ -109,7 +109,11 @@ extern "C" {
 #define PROBE_ICMP_LEN 8	 // ICMP header length 
 #define MAX_GATEWAY 9		 // Maximum source route records
 
-#ifndef HAVE_ICMP_STRUCT        // cygwin on Windows don't define ICMP header
+#ifndef UINT_MAX
+#define UINT_MAX (4294967295U)	 // Maximum of sequence#
+#endif
+
+#ifndef HAVE_ICMP_STRUCT         // cygwin on Windows don't define ICMP header
 struct icmp 
 {
     uint8_t icmp_type;      // type of message
@@ -207,6 +211,14 @@ extern u_char EtherHdr[];	  // for keep the MAC address and type
 extern pcap_t *Sendfp;
 #endif
 extern bool listDevice;
+extern bool tcpIsNull;
+extern bool simulate;
+extern bool reverse;
+extern bool hostreach;
+extern bool interact;
+extern uint16_t capwin;
+extern int distance;
+extern bool do_retransmit;
 
 inline int Rand()
 {
