@@ -242,6 +242,8 @@ detection\&.
 Note that when UDP and other protocols are used at the same time, this
 option is only valid for other protocols while the UDP packet length is
 fixed to 52-byte\&.
+This option is ignored when send the TCP syn package because the TCP syn
+package cannot have any payload\&.
 .TP \w'names'u+4
 .B \-\-conn \fR(TCP connect probe)\fP
 TCP connect probe is usable for detecting the path MTU when the
@@ -496,11 +498,17 @@ Since I have no environment to test these link types such as IEEE
 802.11 wireless LAN, PPPoE, SLIP, or Cisco PPP with HDLC framing,
 etc\&., so there may be BUGs hidden in them\&.
 .PP
-Because of IPsec with Authentication Header (AH) or Encapsulating
-Security Payload (ESP) can not be captured by \fBLibPcap\fP,
-Proberoute implements the \fBrecvfrom(2)\fP for capturing the ICMP Raw
-Socket to work around it, use \fB\-vvvv\fP flags can watch which
-capture catch the packet\&.
+Because of IPsec with Authentication Header (AH) or Encapsulating Security
+Payload (ESP) can not be captured by \fBLibPcap\fP, to work around it, set the
+environment variable \fBPROBE\_RECV\fP for Proberoute to use the
+\fBrecvfrom(2)\fP for capturing the ICMP Raw Socket. Use \fB\-vvv\fP flags can
+watch which capture catch the packet\&:
+.PP
+.ft CW
+.nf
+  $ sudo PROBE_RECV=1 ./proberoute -vvv -icmp google.com
+.fi
+.ft R
 .PP
 On Windows system, when Proberoute received ICMP Fragmentation Needed
 error message, if use the same size of message to traceroute again,

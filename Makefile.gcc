@@ -1,4 +1,4 @@
-CC = c++ -Wall -Wno-parentheses -g
+CC = c++ -g -Wall -Wno-parentheses -Wno-deprecated
 #override CFLAGS += -Wall -g
 #override CPPFLAGS += -Wall -g
-override LIBS += -lpcap -lpopt -lpthread
+override LIBS += -lpcap -lpopt
