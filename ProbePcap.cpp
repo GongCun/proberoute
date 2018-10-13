@@ -135,6 +135,9 @@ ProbePcap::ProbePcap(const char *dev,
         throw ProbeException(msg.str());
     }
 
+    if (verbose > 3)
+        std::cerr << "link type: " << linkType << std::endl;
+
 #ifdef _CYGWIN
     pcap_freealldevs(alldevs);
 #endif

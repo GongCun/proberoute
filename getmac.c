@@ -200,21 +200,22 @@ int getmacByDevice(const char *device, unsigned char *buf)
         while (pAdapter) {
             if (strcmp(device, pAdapter->AdapterName) == 0) {
                 if (pAdapter->Type != MIB_IF_TYPE_ETHERNET &&
-                    pAdapter->Type != IF_TYPE_IEEE80211
+                    pAdapter->Type != IF_TYPE_IEEE80211 &&
+                    pAdapter->Type != MIB_IF_TYPE_PPP /* No support */
                 ) {
                     printf("not support type %d\n", pAdapter->Type);
                     return -1; /* only support ethernet */
                 }
 
-		PhyAddrLen = getmac(pAdapter->IpAddressList.IpAddress.String, buf);
+                PhyAddrLen = getmac(pAdapter->IpAddressList.IpAddress.String, buf);
                 free(pAdapterInfo);
-		return PhyAddrLen;
+                return PhyAddrLen;
             }
             pAdapter = pAdapter->Next;
         }
     }
     else {
-	fprintf(stderr, "GetAdaptersInfo failed with error: %d\n", dwRetVal);
+        fprintf(stderr, "GetAdaptersInfo failed with error: %d\n", dwRetVal);
         return -2;
     }
 

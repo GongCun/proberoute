@@ -197,14 +197,16 @@ int main(int argc, char *argv[])
             addressInfo.getGateway(),
             EtherHdr
         );
-        assert(phyDstLen == 6);
+        if (phyDstLen != 6)
+            throw ProbeException("No support for PPP/VPN connection", MSG);
 
         char *p = (char *)addressInfo.getDevice().c_str();
         while (*p && *p != '{') // Windows device name begin from brace
             ++p;
 	
         phySrcLen = getmacByDevice(p, EtherHdr + phyDstLen);
-        assert(phySrcLen == 6);
+        if (phySrcLen != 6)
+            throw ProbeException("No support for PPP/VPN connection", MSG);
 	
         // IPv4 type is 0x0800 (IPv6 is 0x86DD, ARP is 0x0806, RARP is
         // 0x8035, and IEEE 802.1Q tag is 0x8100), we only support the
@@ -236,15 +238,17 @@ int main(int argc, char *argv[])
         }
 
         char errbuf[PCAP_ERRBUF_SIZE];
-        if ((Sendfp = pcap_open(
-                 addressInfo.getDevice().c_str(),
-                 CAP_LEN,
-                 PCAP_OPENFLAG_PROMISCUOUS, // promiscuous mode
-                 1,                         // no timeout (ms)
-                 NULL,                      // authentication on the remote machine
-                 errbuf)) == NULL
-        )
-            throw ProbeException("pcap_open", errbuf);
+        if (!getenv("PROBE_RECV")) {
+            if ((Sendfp = pcap_open(
+                     addressInfo.getDevice().c_str(),
+                     CAP_LEN,
+                     PCAP_OPENFLAG_PROMISCUOUS, // promiscuous mode
+                     1,                         // no timeout (ms)
+                     NULL,                      // authentication on the remote machine
+                     errbuf)) == NULL
+            )
+                throw ProbeException("pcap_open", errbuf);
+        }
 
 #endif
 
@@ -987,7 +991,8 @@ int main(int argc, char *argv[])
             delete *probe;
 	
 #ifdef _CYGWIN
-        pcap_close(Sendfp);
+        if (Sendfp)
+            pcap_close(Sendfp);
 #endif
 	
     } catch (ProbeException &e) {
