@@ -5,7 +5,7 @@ VERSION = 1.0
 BINDIR = /usr/local/bin
 MANDIR = /usr/local/share/man/man1
 LIBDIR = /usr/local/lib
-DLLFILE := getmac.dll
+DLLFILE := winsock.dll
 
 ifeq (AIX, $(OS))
 include Makefile.aix
@@ -19,8 +19,8 @@ OBJS = main.o ProbeAddressInfo.o ProbeException.o ProbePcap.o ProbeSock.o \
 options.o
 
 ifeq (CYGWIN, $(OS))
-OBJS += getmac.dll
-override LIBS += -lgetmac
+OBJS += winsock.dll
+override LIBS += -lwinsock
 override LDFLAGS += -L.
 endif
 
@@ -65,11 +65,11 @@ proberoute: $(OBJS)
 
 ifeq (CYGWIN, $(OS))
   # must use C compile mode
-  objects = getmac.o getroute.o
-  $(objects): %.o: %.c getmac.h
+  objects = getmac.o getroute.o win_rawsock.o
+  $(objects): %.o: %.c getmac.h win_rawsock.h
 	cc -Wall -g -c -o $@ $<
 
-  getmac.dll: $(objects)
+  winsock.dll: $(objects)
 	cc -shared -o $@ $^ -lws2_32
 endif
 

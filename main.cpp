@@ -49,6 +49,8 @@ bool interact = false;
 uint16_t capwin = 0;
 bool do_retransmit = false;
 uint32_t retransmit = UINT_MAX;
+long long int recvfd = -1;
+struct sockaddr *GlobalLocalAddr;
 
 #define printOpt(x) std::cout << #x": " << x << std::endl
 #define printOptStr(x) std::cout << #x": " << nullToEmpty(x) << std::endl
@@ -185,6 +187,25 @@ int main(int argc, char *argv[])
         ProbeAddressInfo addressInfo(host, service, srcip, srcport, device, mtu);
         if (verbose > 2)
             std::cout << addressInfo << std::endl;
+        GlobalLocalAddr = addressInfo.getLocalSockaddr();
+
+        if (getenv("PROBE_RECV")) {
+#ifdef _CYGWIN
+            // Cygwin _DOESN'T_ support receive data from raw socket, must use
+            // original Winsock. With Winsock, a raw socket can be used with the
+            // SIO_RCVALL IOCTL to receive all IP packets through a network
+            // interface, the protocol must be set to IPPROTO_IP.
+            recvfd = win_rawsock(addressInfo.getLocalSockaddr(),
+                                 (int)addressInfo.getLocalSockaddrLen());
+            if (recvfd < 0)
+                throw ProbeException("win_rawsock error", MSG);
+
+#else
+            if ((recvfd = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP)) < 0)
+                throw ProbeException("socket error");
+#endif
+        }
+
 
 #ifdef _CYGWIN
         // Since the OS after Windows XP can't send TCP raw data directly, we use
