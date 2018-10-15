@@ -636,8 +636,8 @@ int IcmpProbeSock::recvIcmp(const u_char *buf, const int len)
 
     // std::printf("ICMP src: %s, dst: %s\n", inet_ntoa(ip->ip_src), inet_ntoa(ip->ip_dst));
 
-    std::printf("ICMP src: %s, ", inet_ntoa(ip->ip_src));
-    std::printf("dst: %s\n", inet_ntoa(ip->ip_dst));
+    // std::printf("ICMP src: %s, ", inet_ntoa(ip->ip_src));
+    // std::printf("dst: %s\n", inet_ntoa(ip->ip_dst));
 
     icmp = (struct icmp *)(buf + iplen);
     type = icmp->icmp_type;
@@ -719,9 +719,9 @@ int UdpProbeSock::recvIcmp(const u_char *buf, const int len)
     
 
     ip = (struct ip *)buf;
-    std::printf("src: %s, ", inet_ntoa(ip->ip_src));
-    std::printf("dst: %s\n", inet_ntoa(ip->ip_dst));
-    std::printf("protocol: %d\n", ip->ip_p);
+    // std::printf("src: %s, ", inet_ntoa(ip->ip_src));
+    // std::printf("dst: %s\n", inet_ntoa(ip->ip_dst));
+    // std::printf("protocol: %d\n", ip->ip_p);
 
     iplen = ip->ip_hl << 2;
     if (iplen < PROBE_IP_LEN || ip->ip_p != IPPROTO_ICMP)
