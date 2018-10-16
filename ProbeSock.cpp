@@ -615,29 +615,13 @@ int IcmpProbeSock::recvIcmp(const u_char *buf, const int len)
     int iplen, icmplen, origiplen;
     static int *mtuptr = mtus;
     
-
     ip = (struct ip *)buf;
-
-    // std::printf("src: %s, ", inet_ntoa(ip->ip_src));
-    // std::printf("dst: %s\n", inet_ntoa(ip->ip_dst));
-    // std::printf("protocol: %d\n", ip->ip_p);
-
     iplen = ip->ip_hl << 2;
-    // std::cout << "iplen: " << iplen << std::endl;
-    // std::cout << "protocol offset: " << offsetof(struct ip, ip_p) << std::endl;
-    // std::printf("protocol: %d\n", ip->ip_p);
-    // std::printf("ICMP protocol: %d\n", IPPROTO_ICMP);
-    // std::cout << "icmplen: " << len - iplen << std::endl;
     if (iplen < PROBE_IP_LEN || ip->ip_p != IPPROTO_ICMP)
         return 0;
 
     if ((icmplen = len - iplen) < PROBE_ICMP_LEN)
         return 0;
-
-    // std::printf("ICMP src: %s, dst: %s\n", inet_ntoa(ip->ip_src), inet_ntoa(ip->ip_dst));
-
-    // std::printf("ICMP src: %s, ", inet_ntoa(ip->ip_src));
-    // std::printf("dst: %s\n", inet_ntoa(ip->ip_dst));
 
     icmp = (struct icmp *)(buf + iplen);
     type = icmp->icmp_type;
@@ -719,10 +703,6 @@ int UdpProbeSock::recvIcmp(const u_char *buf, const int len)
     
 
     ip = (struct ip *)buf;
-    // std::printf("src: %s, ", inet_ntoa(ip->ip_src));
-    // std::printf("dst: %s\n", inet_ntoa(ip->ip_dst));
-    // std::printf("protocol: %d\n", ip->ip_p);
-
     iplen = ip->ip_hl << 2;
     if (iplen < PROBE_IP_LEN || ip->ip_p != IPPROTO_ICMP)
         return 0;

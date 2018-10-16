@@ -17,6 +17,9 @@ ProbePcap::ProbePcap(const char *dev,
     if (dev == NULL)
         throw ProbeException("device name is null");
     
+    if (getenv("PROBE_RECV"))
+        return;                    // No filters need to be set
+    
     bzero(errbuf, sizeof(errbuf));
 
 #ifdef _CYGWIN

@@ -5,11 +5,8 @@ int win_rawsock(const struct sockaddr *addr, int addrlen)
     int ret;
     WSADATA wsaData;
     SOCKET rawfd = INVALID_SOCKET;
-    /* DWORD dwBufferLen[10]; */
     DWORD Optval = 1;
     DWORD dwBytesReturned = 0;
-    /* WSAOVERLAPPED RecvOverlapped; */
-    /* WSAEVENT EventArray[WSA_MAXIMUM_WAIT_EVENTS]; */
 
     /* Initialize Winsock */
     ret = WSAStartup(MAKEWORD(2,2), &wsaData);
@@ -36,20 +33,16 @@ int win_rawsock(const struct sockaddr *addr, int addrlen)
         return -1;
     }
 
-    /* Set the SIO_RCVALL ioctl */
-    /* ZeroMemory(&RecvOverlapped, sizeof(RecvOverlapped)); */
-    /* EventArray[0] = RecvOverlapped.hEvent = WSACreateEvent(); */
-    /* if (EventArray[0] == WSA_INVALID_EVENT) { */
-        /* fprintf(stderr, "WSACreateEvent() failed with error %d\n", WSAGetLastError()); */
-        /* return -1; */
-    /* } */
-    if ((WSAIoctl(rawfd, SIO_RCVALL, &Optval, sizeof(Optval),
-                  /* &dwBufferLen, sizeof(dwBufferLen), */
-                  /* &RecvOverlapped, 0, */
-                  NULL, 0,
-                  (LPDWORD)&dwBytesReturned, /* A pointer to actual number of
-                                              * bytes of output. */
-                  NULL, NULL)) == SOCKET_ERROR) {
+    if ((WSAIoctl(rawfd,                     /* descriptor identifying a socket */
+                  SIO_RCVALL,                /* dwIoControlCode */
+                  &Optval,                   /* lpvInBuffer */
+                  sizeof(Optval),            /* cbInBuffer */
+                  NULL,                      /* lpvOutBuffer output buffer */
+                  0,                         /* size of output buffer */
+                  (LPDWORD)&dwBytesReturned, /* number of bytes returned */
+                  NULL,                      /* OVERLAPPED structure */
+                  NULL                       /* completion routine */
+         )) == SOCKET_ERROR) {
         fprintf(stderr, "WSAIoctl failed with error: %d\n", WSAGetLastError());
         return -1;
     }
@@ -81,17 +74,6 @@ int win_recvfrom(SOCKET s, char *buf, int len, const struct sockaddr *local)
     DWORD Index;
     
 
-    /* Initialize Winsock */
-    /*
-    int ret;
-    WSADATA wsaData;
-    ret = WSAStartup(MAKEWORD(2,2), &wsaData);
-    if (ret != 0) {
-        fprintf(stderr, "WSAStartup failed with error: %d\n", ret);
-        return -1;
-    }
-    */
-
     /* Crete event, build OVERLAPPED structure. */
     ZeroMemory(&RecvOverlapped, sizeof(RecvOverlapped));
     EventArray[EventTotal] = RecvOverlapped.hEvent = WSACreateEvent();
@@ -104,8 +86,6 @@ int win_recvfrom(SOCKET s, char *buf, int len, const struct sockaddr *local)
     EventTotal++;
     
 
-    /* struct sockaddr_in *p = (struct sockaddr_in *)local; */
-    /* fprintf(stderr, ">> local address %s\n", inet_ntoa(p->sin_addr)); */
     do {
         /* n = recvfrom(s, buf, len, 0, (struct sockaddr *)&addr, &addrlen); */
         n = WSARecvFrom(s, &DataBuf, 1,
@@ -133,16 +113,11 @@ int win_recvfrom(SOCKET s, char *buf, int len, const struct sockaddr *local)
                 }
             }
         }
-        /* n = recvfrom(s, buf, len, 0, NULL, NULL); */
-        /* fprintf(stderr, "win from %s, length = %d\n", inet_ntoa(addr.sin_addr), n); */
-        /* Reset Event Object. */
-        /* printf("Index = %d, WSA_WAIT_EVENT_0 = %d\n", Index, WSA_WAIT_EVENT_0); */
         
         WSAResetEvent(EventArray[Index - WSA_WAIT_EVENT_0]);
         
         Flags = 0;
         ZeroMemory(&RecvOverlapped, sizeof(RecvOverlapped));
-        /* RecvOverlapped.hEvent = EventArray[Index - WSA_WAIT_EVENT_0]; */
         RecvOverlapped.hEvent = EventArray[0];
 
     } while (RecvBytes > 0 && SockComp((struct sockaddr *)&addr, (struct sockaddr *)local));
@@ -154,24 +129,4 @@ int win_recvfrom(SOCKET s, char *buf, int len, const struct sockaddr *local)
     /*     fprintf(stderr, "win from %s, length = %d\n", inet_ntoa(addr.sin_addr), RecvBytes); */
     return RecvBytes;
 
-#if 0
-    for (;;) {
-    n = recvfrom(s, buf, len, 0, NULL, NULL);
-    if (n < 0) {
-        fprintf(stderr, "recvfrom(WIN) failed with error: %d\n", WSAGetLastError());
-        exit(-1);
-    }
-
-    /* if (n >= 0) */
-        /* fprintf(stderr, "from %s, length = %d\n", inet_ntoa(addr.sin_addr), n); */
-        /* fprintf(stderr, "length = %d\n", n); */
-
-    iphdr = (IPV4_HDR *)buf;
-    if ((uint8_t)iphdr->ip_protocol == 1) {
-    printf("win from: %s\n", inet_ntoa(iphdr->ip_src));
-    printf("win to: %s\n", inet_ntoa(iphdr->ip_dst));
-    printf("win protocol offset: %ld\n\n", offsetof(IPV4_HDR, ip_protocol));
-    }
-    }
-#endif
 }
