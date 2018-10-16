@@ -49,6 +49,8 @@ bool interact = false;
 uint16_t capwin = 0;
 bool do_retransmit = false;
 uint32_t retransmit = UINT_MAX;
+long long int recvfd = -1;
+struct sockaddr *GlobalLocalAddr;
 
 #define printOpt(x) std::cout << #x": " << x << std::endl
 #define printOptStr(x) std::cout << #x": " << nullToEmpty(x) << std::endl
@@ -144,7 +146,7 @@ int main(int argc, char *argv[])
     u_short sport, dport;
     uint16_t ipid = (u_short)Rand() & 0xffff;
     uint32_t seq = 0, ack = 0;
-    int count = 0;
+    uint32_t count = 0;
     u_char buf[MAX_MTU];
     bool found = false, unreachable = false;
     int code = 0, tcpcode = 0;
@@ -185,6 +187,25 @@ int main(int argc, char *argv[])
         ProbeAddressInfo addressInfo(host, service, srcip, srcport, device, mtu);
         if (verbose > 2)
             std::cout << addressInfo << std::endl;
+        GlobalLocalAddr = addressInfo.getLocalSockaddr();
+
+        if (getenv("PROBE_RECV")) {
+#ifdef _CYGWIN
+            // Cygwin _DOESN'T_ support receive data from raw socket, must use
+            // original Winsock. With Winsock, a raw socket can be used with the
+            // SIO_RCVALL IOCTL to receive all IP packets through a network
+            // interface, the protocol must be set to IPPROTO_IP.
+            recvfd = win_rawsock(addressInfo.getLocalSockaddr(),
+                                 (int)addressInfo.getLocalSockaddrLen());
+            if (recvfd < 0)
+                throw ProbeException("win_rawsock error", MSG);
+
+#else
+            if ((recvfd = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP)) < 0)
+                throw ProbeException("socket error");
+#endif
+        }
+
 
 #ifdef _CYGWIN
         // Since the OS after Windows XP can't send TCP raw data directly, we use
@@ -459,18 +480,18 @@ int main(int argc, char *argv[])
 			    uint32_t *p;
 			    p = (uint32_t *)(tcpopt + 4);
 			    if (verbose > 2)
-				std::fprintf(stderr, "TSval(original): %ld\n", ntohl(*p));
+				std::fprintf(stderr, "TSval(original): %d\n", ntohl(*p));
 
 			    // The timestamp increases by 1 per 500 ms.
 			    uint32_t tsval = htonl(ntohl(*p) + delta(&tcp_now) / 500);
 			    memcpy(tcpopt + 4, (u_char *)&tsval, 4);
 			    p = (uint32_t *)(tcpopt + 4);
 			    if (verbose > 2)
-				std::fprintf(stderr, "TSval(changed): %ld\n", ntohl(*p));
+				std::fprintf(stderr, "TSval(changed): %d\n", ntohl(*p));
 				
 			    p = (uint32_t *)(tcpopt + 8);
 			    if (verbose > 2)
-				std::fprintf(stderr, "TSecr: %ld\n", ntohl(*p));
+				std::fprintf(stderr, "TSecr: %d\n", ntohl(*p));
 			} // set TSval
                     }	  // nonbConn succeed
                     else if (n > 0) {

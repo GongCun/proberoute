@@ -17,6 +17,9 @@ ProbePcap::ProbePcap(const char *dev,
     if (dev == NULL)
         throw ProbeException("device name is null");
     
+    if (getenv("PROBE_RECV"))
+        return;                    // No filters need to be set
+    
     bzero(errbuf, sizeof(errbuf));
 
 #ifdef _CYGWIN
@@ -169,26 +172,17 @@ const u_char *ProbePcap::recvPkt(int *len) throw(ProbeException)
     int n;
     struct sockaddr addr;
     socklen_t addrlen = sizeof(addr);
-    static int recvfd = -1;
     static u_char recvbuf[MAX_MTU];
 
-    if (recvfd < 0) {
 #ifdef _CYGWIN
-        // Cygwin _DOESN'T_ support receive data from raw socket. With
-        // Winsock, a raw socket can be used with the SIO_RCVALL IOCTL
-        // to receive all IP packets through a network interface, the
-        // protocol must be set to IPPROTO_IP.
-        if ((recvfd = socket(AF_INET, SOCK_RAW, IPPROTO_IP)) < 0)
+    while ((n = win_recvfrom(recvfd, (char *)recvbuf, sizeof(recvbuf), GlobalLocalAddr)) < 0)
 #else
-        if ((recvfd = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP)) < 0)
+    while ((n = recvfrom(recvfd, recvbuf, sizeof(recvbuf), 0, &addr, &addrlen)) == -1)
 #endif
-            throw ProbeException("socket error");
-    }
-
-    while ((n = recvfrom(recvfd, recvbuf, sizeof(recvbuf), 0, &addr, &addrlen)) == -1) {
-        if (!(errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR))
-            throw ProbeException("recvfrom error");
-    }
+        {
+            if (!(errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR))
+                throw ProbeException("recvfrom error");
+        }
 
     *len = n;
     return recvbuf;
