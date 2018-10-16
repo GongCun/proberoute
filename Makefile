@@ -98,6 +98,7 @@ ifeq (CYGWIN, $(OS))
 
   build: $(PROGS)
 	@[ -d ${BUILDDIR}/ ] || mkdir -p ${BUILDDIR}/
+	@rm -rf {BUILDDIR}/* || :
 	@cygcheck $(PROGS) | sed '1d' | grep -e cygwin -e pcap -e packet | sed 's/\\/\\\\/g' | \
 	while read f; do cp -p $$f ${BUILDDIR}/; done
 	cp -p $(PROGS) ${BUILDDIR}/ && strip ${BUILDDIR}/$(PROGS)
