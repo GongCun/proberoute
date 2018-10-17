@@ -92,17 +92,19 @@ doc/$(PROGS)_man.pdf: $(PROGS).1
 	groff -man -Tps <$< >doc/$(PROGS).ps)
 	cd doc && ps2pdf $(PROGS).ps $@
 
+BUILDDIR := build
+.PHONY: clean_build
+clean_build:
+	@rm -rf ${BUILDDIR}/*
+
 ifeq (CYGWIN, $(OS))
   # copy the DLL file to build folder
-  BUILDDIR := build
-
-  build: $(PROGS)
+  build: $(PROGS) clean_build
 	@[ -d ${BUILDDIR}/ ] || mkdir -p ${BUILDDIR}/
-	@rm -rf {BUILDDIR}/* || :
 	@cygcheck $(PROGS) | sed '1d' | grep -e cygwin -e pcap -e packet | sed 's/\\/\\\\/g' | \
 	while read f; do cp -p $$f ${BUILDDIR}/; done
 	cp -p $(PROGS) ${BUILDDIR}/ && strip ${BUILDDIR}/$(PROGS)
 endif
 
 clean:
-	rm -f ${PROGS} ${PROGS}.exe *.o *.dll core *.BAK *~ usage.h
+	rm -rf ${PROGS} ${PROGS}.exe *.o *.dll core *.BAK *~ usage.h ${BUILDDIR}
