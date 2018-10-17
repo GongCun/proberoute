@@ -426,9 +426,12 @@ int main(int argc, char *argv[])
 			    }
 
 			    std::cout << std::endl;
-			    std::cout << "Interactive mode, press Ctrl-D to end" << std::endl;
+			    std::cout << "Interactive mode, press 'quit' to end" << std::endl;
 
 			    while (std::getline(std::cin, readline)) {
+              if (readline == "quit")
+                  break;
+              
 				if (write(connfd, "\x00", 1) != 1)
 				    throw ProbeException("write");
 				count++;
@@ -438,6 +441,7 @@ int main(int argc, char *argv[])
 					    count == 3 ? "rd" : "th");
 			    }
 			    std::cin.clear();
+			    std::cin.setstate(std::ios::goodbit);
 
 			    if (do_retransmit) {
 				std::cout << "\nPlease enter the packet# to retransmit: ";
