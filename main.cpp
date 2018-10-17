@@ -191,11 +191,7 @@ int main(int argc, char *argv[])
             std::cout << addressInfo << std::endl;
         GlobalLocalAddr = addressInfo.getLocalSockaddr();
 
-        if (getenv("PPP_VPN"))
-            // devName = "GenericDialupAdapter";
-            devName = PCAP_SRC_IF_STRING "\\Device\\NPF_NdisWanIp";
-        else
-            devName = addressInfo.getDevice();
+        devName = addressInfo.getDevice();
 
         if (getenv("PROBE_RECV")) {
 #ifdef _CYGWIN
@@ -226,18 +222,24 @@ int main(int argc, char *argv[])
             addressInfo.getGateway(),
             EtherHdr
         );
-        if (phyDstLen != 6)
-            throw ProbeException("No support connection,"
-                                 "try to specify the PPP_VPN env.", MSG);
+        if (phyDstLen < 0)
+            throw ProbeException("getmac() phyDstLen error", MSG);
 
         char *p = (char *)addressInfo.getDevice().c_str();
         while (*p && *p != '{') // Windows device name begin from brace
             ++p;
 	
         phySrcLen = getmacByDevice(p, EtherHdr + phyDstLen);
-        if (phySrcLen != 6)
-            throw ProbeException("No support connection,"
-                                 "try to specify the PPP_VPN env.", MSG);
+        if (phySrcLen < 0)
+            throw ProbeException("getmac() phySrcLen error", MSG);
+
+        if (phySrcLen != 6) {
+            // devName = "GenericDialupAdapter";
+            devName = PCAP_SRC_IF_STRING "\\Device\\NPF_NdisWanIp";
+            if (verbose > 3)
+                std::cerr << "Maybe PPP/VPN connection, set device to NPF_NdisWanIp."
+                          << std::endl;
+        }
 	
         // IPv4 type is 0x0800 (IPv6 is 0x86DD, ARP is 0x0806, RARP is
         // 0x8035, and IEEE 802.1Q tag is 0x8100), we only support the

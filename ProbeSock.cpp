@@ -111,6 +111,8 @@ ssize_t ProbeSock::sendPacket(const void *buf, size_t buflen, int flags, const s
         if (pcap_sendpacket(Sendfp, (const u_char *)tcpbuf, EtherLen + buflen) != 0)
             throw ProbeException("pcap_sendpacket error", pcap_geterr(Sendfp));
 
+        // std::cerr << "Have sent TCP" << std::endl;
+
         return EtherLen + buflen;
     }
 #endif
