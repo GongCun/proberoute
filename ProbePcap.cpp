@@ -38,7 +38,10 @@ ProbePcap::ProbePcap(const char *dev,
         pcap_freealldevs(alldevs);
         throw ProbeException("pcap_findalldevs_ex: can't find device");
     }
-            
+
+    if (verbose > 3)
+        std::cerr << "dev: " << d->name << std::endl;
+    
     handle = pcap_open_live(
         d->name,                   // name of the device
         CAP_LEN,
@@ -50,8 +53,10 @@ ProbePcap::ProbePcap(const char *dev,
     handle = pcap_open_live(dev, CAP_LEN, 1, CAP_TIMEOUT, errbuf);
 #endif
 
-    if (handle == NULL)
+    if (handle == NULL) {
+        std::cerr << d->name << std::endl;
         throw ProbeException("pcap_open_live", errbuf);
+    }
 
     if (strlen(errbuf))
         std::cerr << "pcap_open_live warning: " << errbuf << std::endl;
@@ -211,7 +216,6 @@ const u_char *ProbePcap::captPkt(int *len) throw(ProbeException)
     while ((ptr = pcap_next(handle, &hdr)) == NULL) ;
 #endif
 
-    
     // Point-to-Point Protocol
     if (linkType == 9 && ethLen == 0) {
         // PPP in HDLC-like framing.
@@ -242,10 +246,12 @@ const u_char *ProbePcap::captPkt(int *len) throw(ProbeException)
       operation on nonsocket (WSAENOTSOCK).
 
     */
+
+    // Caplen is likely overflow, limit it to no more than GUESS_CAP_LEN.
 #ifdef _CYGWIN
-    if (!hdr->caplen)
+    if (!hdr->caplen || hdr->caplen > GUESS_CAP_LEN)
 #else
-    if (!hdr.caplen)
+    if (!hdr.caplen || hdr.caplen > GUESS_CAP_LEN)
 #endif
         *len = GUESS_CAP_LEN - ethLen; // WinPcap don't return the caplen or len
     else {
@@ -256,6 +262,11 @@ const u_char *ProbePcap::captPkt(int *len) throw(ProbeException)
 #endif
     }
 
+    // std::printf("hdr->caplen: %u, ethLen %d, len: %d\n",
+    //             hdr->caplen,
+    //             ethLen,
+    //             *len);
+    
     return ptr + ethLen;
 }
 

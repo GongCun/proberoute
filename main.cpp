@@ -159,6 +159,8 @@ int main(int argc, char *argv[])
     std::vector<ProbeSock *> probeVec;
     std::vector<ProbeSock *>::iterator probe;
 
+    std::string devName;
+
     // make std::cout and stdout unbuffered
     std::cout.setf(std::ios::unitbuf);
     setbuf(stdout, NULL);
@@ -189,6 +191,8 @@ int main(int argc, char *argv[])
             std::cout << addressInfo << std::endl;
         GlobalLocalAddr = addressInfo.getLocalSockaddr();
 
+        devName = addressInfo.getDevice();
+
         if (getenv("PROBE_RECV")) {
 #ifdef _CYGWIN
             // Cygwin _DOESN'T_ support receive data from raw socket, must use
@@ -218,16 +222,24 @@ int main(int argc, char *argv[])
             addressInfo.getGateway(),
             EtherHdr
         );
-        if (phyDstLen != 6)
-            throw ProbeException("No support for PPP/VPN connection", MSG);
+        if (phyDstLen < 0)
+            throw ProbeException("getmac() phyDstLen error", MSG);
 
         char *p = (char *)addressInfo.getDevice().c_str();
         while (*p && *p != '{') // Windows device name begin from brace
             ++p;
 	
         phySrcLen = getmacByDevice(p, EtherHdr + phyDstLen);
-        if (phySrcLen != 6)
-            throw ProbeException("No support for PPP/VPN connection", MSG);
+        if (phySrcLen < 0)
+            throw ProbeException("getmac() phySrcLen error", MSG);
+
+        if (phySrcLen != 6) {
+            // devName = "GenericDialupAdapter";
+            devName = PCAP_SRC_IF_STRING "\\Device\\NPF_NdisWanIp";
+            if (verbose > 3)
+                std::cerr << "Maybe PPP/VPN connection, set device to NPF_NdisWanIp."
+                          << std::endl;
+        }
 	
         // IPv4 type is 0x0800 (IPv6 is 0x86DD, ARP is 0x0806, RARP is
         // 0x8035, and IEEE 802.1Q tag is 0x8100), we only support the
@@ -259,16 +271,20 @@ int main(int argc, char *argv[])
         }
 
         char errbuf[PCAP_ERRBUF_SIZE];
+
         if (!getenv("PROBE_RECV")) {
             if ((Sendfp = pcap_open(
-                     addressInfo.getDevice().c_str(),
+                     // addressInfo.getDevice().c_str(),
+                     devName.c_str(),
                      CAP_LEN,
                      PCAP_OPENFLAG_PROMISCUOUS, // promiscuous mode
                      1,                         // no timeout (ms)
                      NULL,                      // authentication on the remote machine
                      errbuf)) == NULL
-            )
+            ) {
+                std::cerr << "Device name: " << devName << std::endl;
                 throw ProbeException("pcap_open", errbuf);
+            }
         }
 
 #endif
@@ -377,7 +393,8 @@ int main(int argc, char *argv[])
                         // the write() packet arriving to remote host, we need to set the
                         // TTL to 1.
 
-                        capture = ProbePcap::Instance(addressInfo.getDevice().c_str(), "tcp");
+                        // capture = ProbePcap::Instance(addressInfo.getDevice().c_str(), "tcp");
+                        capture = ProbePcap::Instance(devName.c_str(), "tcp");
 
                         optlen = sizeof(origttl);
                         if (getsockopt(connfd, IPPROTO_IP, IP_TTL, &origttl, &optlen) < 0)
@@ -665,7 +682,9 @@ int main(int argc, char *argv[])
         // Send the probe and obtain the router/host IP
         // 
         ProbePcap::resetInstance();
-        capture = ProbePcap::Instance(addressInfo.getDevice().c_str(),
+        
+        // capture = ProbePcap::Instance(addressInfo.getDevice().c_str(),
+        capture = ProbePcap::Instance(devName.c_str(),
                                       "tcp or "
                                       "icmp[0:1] == 0  or "  // Echo Reply
                                       "icmp[0:1] == 3  or "  // Destination Unreachable

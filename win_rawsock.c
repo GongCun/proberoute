@@ -66,7 +66,7 @@ int win_recvfrom(SOCKET s, char *buf, int len, const struct sockaddr *local)
     struct sockaddr_in addr;
     int addrlen = sizeof(addr);
     int n;
-    IPV4_HDR *iphdr;
+    /* IPV4_HDR *iphdr; */
     WSABUF DataBuf;
     WSAEVENT EventArray[WSA_MAXIMUM_WAIT_EVENTS];
     WSAOVERLAPPED RecvOverlapped;
