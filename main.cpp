@@ -429,8 +429,8 @@ int main(int argc, char *argv[])
 			    std::cout << "Interactive mode, press 'quit' to end" << std::endl;
 
 			    while (std::getline(std::cin, readline)) {
-              if (readline == "quit")
-                  break;
+			        if (readline == "quit")
+			            break;
               
 				if (write(connfd, "\x00", 1) != 1)
 				    throw ProbeException("write");
