@@ -99,7 +99,7 @@ ssize_t ProbeSock::sendPacket(const void *buf, size_t buflen, int flags, const s
     throw(ProbeException)
 {
 #ifdef _CYGWIN
-    if (protocol == IPPROTO_TCP) {
+    if (!getenv("PROBE_RECV") && protocol == IPPROTO_TCP) {
         
         assert(Sendfp);
         assert(EtherLen > 0);
@@ -110,6 +110,8 @@ ssize_t ProbeSock::sendPacket(const void *buf, size_t buflen, int flags, const s
 
         if (pcap_sendpacket(Sendfp, (const u_char *)tcpbuf, EtherLen + buflen) != 0)
             throw ProbeException("pcap_sendpacket error", pcap_geterr(Sendfp));
+
+        // std::cerr << "Have sent TCP" << std::endl;
 
         return EtherLen + buflen;
     }
@@ -615,7 +617,6 @@ int IcmpProbeSock::recvIcmp(const u_char *buf, const int len)
     int iplen, icmplen, origiplen;
     static int *mtuptr = mtus;
     
-
     ip = (struct ip *)buf;
     iplen = ip->ip_hl << 2;
     if (iplen < PROBE_IP_LEN || ip->ip_p != IPPROTO_ICMP)
@@ -624,23 +625,24 @@ int IcmpProbeSock::recvIcmp(const u_char *buf, const int len)
     if ((icmplen = len - iplen) < PROBE_ICMP_LEN)
         return 0;
 
-
     icmp = (struct icmp *)(buf + iplen);
     type = icmp->icmp_type;
     code = icmp->icmp_code;
 
     if (type == ICMP_ECHOREPLY ||
         type == ICMP_TSTAMPREPLY) {
+
         if (icmp->icmp_id == htons(icmpId) &&
             icmp->icmp_seq == htons(icmpSeq) &&
-            ip->ip_id != htons(ipid)) // ensure the message is not sent by
-            // ourselves
+            ip->ip_id != htons(ipid)) // ensure the message is not sent by ourselves
             return -3;
+
     }
+
     else if ((type == ICMP_TIMXCEED && code == ICMP_TIMXCEED_INTRANS) ||
              type == ICMP_UNREACH ||
              type == ICMP_PARAMPROB) {
-        
+
         origip = (struct ip *)(buf + iplen + PROBE_ICMP_LEN);
         origiplen = origip->ip_hl << 2;
 
@@ -674,9 +676,13 @@ int IcmpProbeSock::recvIcmp(const u_char *buf, const int len)
                 pmtu = *mtuptr++;
             
         }
-
         return ((type == ICMP_TIMXCEED) ? -1 : code + 1);
     }
+
+    // printf("ICMP_TIMXCEED = %d, ICMP_TIMXCEED_INTRANS = %d\n", ICMP_TIMXCEED, ICMP_TIMXCEED_INTRANS);
+    
+    printf("type = %d, code = %d\n", type, code);
+    
     return 0;
 }
  

@@ -49,6 +49,8 @@ bool interact = false;
 uint16_t capwin = 0;
 bool do_retransmit = false;
 uint32_t retransmit = UINT_MAX;
+long long int recvfd = -1;
+struct sockaddr *GlobalLocalAddr;
 
 #define printOpt(x) std::cout << #x": " << x << std::endl
 #define printOptStr(x) std::cout << #x": " << nullToEmpty(x) << std::endl
@@ -144,7 +146,7 @@ int main(int argc, char *argv[])
     u_short sport, dport;
     uint16_t ipid = (u_short)Rand() & 0xffff;
     uint32_t seq = 0, ack = 0;
-    int count = 0;
+    uint32_t count = 0;
     u_char buf[MAX_MTU];
     bool found = false, unreachable = false;
     int code = 0, tcpcode = 0;
@@ -156,6 +158,8 @@ int main(int argc, char *argv[])
 
     std::vector<ProbeSock *> probeVec;
     std::vector<ProbeSock *>::iterator probe;
+
+    std::string devName;
 
     // make std::cout and stdout unbuffered
     std::cout.setf(std::ios::unitbuf);
@@ -185,6 +189,27 @@ int main(int argc, char *argv[])
         ProbeAddressInfo addressInfo(host, service, srcip, srcport, device, mtu);
         if (verbose > 2)
             std::cout << addressInfo << std::endl;
+        GlobalLocalAddr = addressInfo.getLocalSockaddr();
+
+        devName = addressInfo.getDevice();
+
+        if (getenv("PROBE_RECV")) {
+#ifdef _CYGWIN
+            // Cygwin _DOESN'T_ support receive data from raw socket, must use
+            // original Winsock. With Winsock, a raw socket can be used with the
+            // SIO_RCVALL IOCTL to receive all IP packets through a network
+            // interface, the protocol must be set to IPPROTO_IP.
+            recvfd = win_rawsock(addressInfo.getLocalSockaddr(),
+                                 (int)addressInfo.getLocalSockaddrLen());
+            if (recvfd < 0)
+                throw ProbeException("win_rawsock error", MSG);
+
+#else
+            if ((recvfd = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP)) < 0)
+                throw ProbeException("socket error");
+#endif
+        }
+
 
 #ifdef _CYGWIN
         // Since the OS after Windows XP can't send TCP raw data directly, we use
@@ -197,16 +222,24 @@ int main(int argc, char *argv[])
             addressInfo.getGateway(),
             EtherHdr
         );
-        if (phyDstLen != 6)
-            throw ProbeException("No support for PPP/VPN connection", MSG);
+        if (phyDstLen < 0)
+            throw ProbeException("getmac() phyDstLen error", MSG);
 
         char *p = (char *)addressInfo.getDevice().c_str();
         while (*p && *p != '{') // Windows device name begin from brace
             ++p;
 	
         phySrcLen = getmacByDevice(p, EtherHdr + phyDstLen);
-        if (phySrcLen != 6)
-            throw ProbeException("No support for PPP/VPN connection", MSG);
+        if (phySrcLen < 0)
+            throw ProbeException("getmac() phySrcLen error", MSG);
+
+        if (phySrcLen != 6) {
+            // devName = "GenericDialupAdapter";
+            devName = PCAP_SRC_IF_STRING "\\Device\\NPF_NdisWanIp";
+            if (verbose > 3)
+                std::cerr << "Maybe PPP/VPN connection, set device to NPF_NdisWanIp."
+                          << std::endl;
+        }
 	
         // IPv4 type is 0x0800 (IPv6 is 0x86DD, ARP is 0x0806, RARP is
         // 0x8035, and IEEE 802.1Q tag is 0x8100), we only support the
@@ -238,16 +271,20 @@ int main(int argc, char *argv[])
         }
 
         char errbuf[PCAP_ERRBUF_SIZE];
+
         if (!getenv("PROBE_RECV")) {
             if ((Sendfp = pcap_open(
-                     addressInfo.getDevice().c_str(),
+                     // addressInfo.getDevice().c_str(),
+                     devName.c_str(),
                      CAP_LEN,
                      PCAP_OPENFLAG_PROMISCUOUS, // promiscuous mode
                      1,                         // no timeout (ms)
                      NULL,                      // authentication on the remote machine
                      errbuf)) == NULL
-            )
+            ) {
+                std::cerr << "Device name: " << devName << std::endl;
                 throw ProbeException("pcap_open", errbuf);
+            }
         }
 
 #endif
@@ -356,7 +393,8 @@ int main(int argc, char *argv[])
                         // the write() packet arriving to remote host, we need to set the
                         // TTL to 1.
 
-                        capture = ProbePcap::Instance(addressInfo.getDevice().c_str(), "tcp");
+                        // capture = ProbePcap::Instance(addressInfo.getDevice().c_str(), "tcp");
+                        capture = ProbePcap::Instance(devName.c_str(), "tcp");
 
                         optlen = sizeof(origttl);
                         if (getsockopt(connfd, IPPROTO_IP, IP_TTL, &origttl, &optlen) < 0)
@@ -405,9 +443,12 @@ int main(int argc, char *argv[])
 			    }
 
 			    std::cout << std::endl;
-			    std::cout << "Interactive mode, press Ctrl-D to end" << std::endl;
+			    std::cout << "Interactive mode, press 'quit' to end" << std::endl;
 
 			    while (std::getline(std::cin, readline)) {
+			        if (readline == "quit")
+			            break;
+              
 				if (write(connfd, "\x00", 1) != 1)
 				    throw ProbeException("write");
 				count++;
@@ -417,6 +458,7 @@ int main(int argc, char *argv[])
 					    count == 3 ? "rd" : "th");
 			    }
 			    std::cin.clear();
+			    std::cin.setstate(std::ios::goodbit);
 
 			    if (do_retransmit) {
 				std::cout << "\nPlease enter the packet# to retransmit: ";
@@ -459,18 +501,18 @@ int main(int argc, char *argv[])
 			    uint32_t *p;
 			    p = (uint32_t *)(tcpopt + 4);
 			    if (verbose > 2)
-				std::fprintf(stderr, "TSval(original): %ld\n", ntohl(*p));
+				std::fprintf(stderr, "TSval(original): %d\n", ntohl(*p));
 
 			    // The timestamp increases by 1 per 500 ms.
 			    uint32_t tsval = htonl(ntohl(*p) + delta(&tcp_now) / 500);
 			    memcpy(tcpopt + 4, (u_char *)&tsval, 4);
 			    p = (uint32_t *)(tcpopt + 4);
 			    if (verbose > 2)
-				std::fprintf(stderr, "TSval(changed): %ld\n", ntohl(*p));
+				std::fprintf(stderr, "TSval(changed): %d\n", ntohl(*p));
 				
 			    p = (uint32_t *)(tcpopt + 8);
 			    if (verbose > 2)
-				std::fprintf(stderr, "TSecr: %ld\n", ntohl(*p));
+				std::fprintf(stderr, "TSecr: %d\n", ntohl(*p));
 			} // set TSval
                     }	  // nonbConn succeed
                     else if (n > 0) {
@@ -644,7 +686,9 @@ int main(int argc, char *argv[])
         // Send the probe and obtain the router/host IP
         // 
         ProbePcap::resetInstance();
-        capture = ProbePcap::Instance(addressInfo.getDevice().c_str(),
+        
+        // capture = ProbePcap::Instance(addressInfo.getDevice().c_str(),
+        capture = ProbePcap::Instance(devName.c_str(),
                                       "tcp or "
                                       "icmp[0:1] == 0  or "  // Echo Reply
                                       "icmp[0:1] == 3  or "  // Destination Unreachable

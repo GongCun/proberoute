@@ -72,9 +72,16 @@
 #include <algorithm>
 #include <vector>
 
+#ifndef offsetof
+#define offsetof(type, f) ((size_t) ((char *)&((type *)0)->f - (char *)(type *)0))
+#endif
 #ifdef _CYGWIN
 extern "C" {
 #include "getmac.h"
+// #include "win_rawsock.h"
+int win_rawsock(const struct sockaddr *addr, int addrlen);
+// int win_recvfrom(SOCKET s, char *buf, int len);
+int win_recvfrom(SOCKET s, char *buf, int len, const struct sockaddr *local);
 }
 #endif
 
@@ -204,10 +211,10 @@ extern u_char tcpopt[TCP_OPT_LEN], ipopt[IP_OPT_LEN];
 extern u_char *optptr;
 extern std::vector<int> protoVec;
 extern std::string captureFunc;
-extern struct sockaddr *Netmask;  // for CYGWIN capture filter in case
+extern struct sockaddr *Netmask; // for CYGWIN capture filter in case
 #ifdef _CYGWIN
 extern const u_char EtherLen;
-extern u_char EtherHdr[];	  // for keep the MAC address and type
+extern u_char EtherHdr[];        // for keep the MAC address and type
 extern pcap_t *Sendfp;
 #endif
 extern bool listDevice;
@@ -219,6 +226,9 @@ extern bool interact;
 extern uint16_t capwin;
 extern int distance;
 extern bool do_retransmit;
+extern long long int recvfd;     // To correspond to the Winsock SOCKET type
+extern struct sockaddr *GlobalLocalAddr;
+
 
 inline int Rand()
 {
