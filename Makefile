@@ -115,4 +115,4 @@ ifeq (CYGWIN, $(OS))
 endif
 
 clean:
-	rm -rf ${PROGS} ${PROGS}.exe *.o *.dll core *.BAK *~ usage.h ${BUILDDIR}
+	rm -rf ${PROGS} ${PROGS}.exe *.o *.dll core *.BAK *~ usage.h ${BUILDDIR} GetDllDirectory.exe
