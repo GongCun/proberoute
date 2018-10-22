@@ -64,65 +64,44 @@ The proberoute command prints an \fB!\fP (exclamation mark) with an
 abbreviation before the round-trip time indicates that received the ICMP
 notification message:
 .PP
-.PD 0
-.IP Item
-.br
+.IP Item 0.8i
 Description
 .IP !
-.br
 Port unreachable (the ttl is <= 1)
 .IP !PORT
-.br
 Port unreachable
 .IP !H
-.br
 Host unreachable
 .IP !N
-.br
 Network unreachable
 .IP !P
-.br
 Protocol unreachable
 .IP !F
-.br
 Need fragment
 .IP !S
-.br
 Source route failed
 .IP !U
-.br
 Unknown network
 .IP !W
-.br
 Unknown host
 .IP !I
-.br
 Source route isolated
 .IP !A
-.br
 Admin prohibited network
 .IP !Z
-.br
 Admin prohibited host
 .IP !Q
-.br
 Bad tos for network
 .IP !T
-.br
 Bad tos for host
 .IP !X
-.br
 Admin prohibited filter
 .IP !V
-.br
 Host precedence violation
 .IP !C
-.br
 Precedence cutoff
 .IP !TTL
-.br
 Time exceeded
-.PD
 .PP 
 Increase the verbosity by \fB-v\fP flag will show the detail
 message\&. When received the ICMP Need Fragment error message (!F
@@ -242,6 +221,8 @@ detection\&.
 Note that when UDP and other protocols are used at the same time, this
 option is only valid for other protocols while the UDP packet length is
 fixed to 52-byte\&.
+This option is ignored when send the TCP syn package because the TCP syn
+package cannot have any payload\&.
 .TP \w'names'u+4
 .B \-\-conn \fR(TCP connect probe)\fP
 TCP connect probe is usable for detecting the path MTU when the
@@ -331,13 +312,40 @@ disabled source routing for security reasons)\&.
 .TP \w'names'u+4
 .B \-l, \-\-list
 Print the list of the network interface avaiable on the system, but
-Proberoute can't sniff loopback packets on Windows system.
+Proberoute can't sniff loopback packets on Windows system\&.
+.TP \w'names'u+4
+.B \-\-simulate
+When the connection is established, to detect the route by
+sending a order bye packet, which must be used with \fB\-\-conn\fP option\&.
+.TP \w'names'u+4
+.B \-\-reverse
+Set the TTL of the probe packet decreased from large to
+small. Used to evade the Cisco ASA firewall
+\fBttl\-evasion\-protection\fP policy\&.
+
+.TP \w'names'u+4
+.B \-\-retransmit
+Retransmit the specified packet in interactive mode, should be
+used with \fB\-\-conn\fP and \fB\-\-interact\fP option\&. Note:
+retransmit the last packet received by the other side will be
+considered as the TCP keepalive probe\&.
+
+.TP \w'names'u+4
+.B \-\-interact
+When the connection is established, control the frequency of sending
+bytes through this option. Each time a line read from stdin, sends a
+\&"\\x00\&" byte by \fBwrite()\fP \&. This option can be used with
+\fItcpdump\fP and Unix \fIdiscard\fP service\&. For example,
+asymmetric routing will cause network rejection due to
+non-synchronization of TCP sessions, this option can be used to
+send probe packets when retransmission occurs\&.
+
 .PP
 .SH "PARAMETERS"
 .PP
 .TP \w'names'u+4
 .B Item
-Destination
+Description
 .TP \w'names'u+4
 .B HOST
 Specifies the destination host, either by host name or IP number. This
@@ -408,30 +416,37 @@ advanced options for firewall evasion or spoofing under the permission
 from the network administrator\&.
 .PP
 .SH FILES
-Proberoute relies on \fBLibPcap\fP library, which provide common
+Proberoute relies on \fBlibpcap\fP library, which provide common
 methods to access the datalink layer by wrapping the BSD Packet Filter
 (BPF), the Linux PF_PACKET interface, or other methods.
+.B Npcap
+and
+.B WinPcap
+are Windows versions of the
+.B libpcap
+library, by making use of the NPF/NDIS API\&.
 .PP
-.PD 0
-.IP Item
-.br
-Description
+\" .PD 0
+.IP Item 0.6i
+\p Description
 .IP /usr/lib/libpcap.a
-.br
-LibPcap library file
+Libpcap library file
 .IP /dev/bpf?
-BPF device
-.br
+\p BPF device
 .IP /proc/net/dev
 Network interfaces information
-.PD
+.IP C:\\\\Windows\\\\system32\\\\[Npcap?]\\\\Packet.dll
+WinPcap/Npcap low-level dynamic link library\&.
+.IP C:\\\\Windows\\\\system32\\\\[Npcap?]\\\\wpcap.dll
+WinPcap/Npcap high-level and system-independent library\&.
+\" .PD
 .PP
 .SH "SEE ALSO"
 traceroute(8), nmap(1), ping(1)
 .PP
 .SH "SECURITY"
 This command requires privileged users due to using
-\fBLibPcap\fP/\fBWinPcap\fP and raw socket\&.
+\fBlibpcap\fP/\fBWinPcap\fP and raw socket\&.
 .PP
 When used properly, Proberoute helps to detect the routing problems and
 location errors\&. But when used improperly, Proberoute could (in rare
@@ -483,29 +498,49 @@ Autonomous System (AS) path lookups\&.
 .IP *
 Sending several probes concurrently\&.
 .IP *
-PPP/VPN connection on Windows system\&.
-.IP *
-Receive raw socket data using \fBrecvfrom(2)\fP on Windows OS\&.
-.IP *
 Can not use
 .B \-\-conn
 option on some Windows system\&.
 .PD
 .PP
-Since I have no environment to test these link types such as IEEE
-802.11 wireless LAN, PPPoE, SLIP, or Cisco PPP with HDLC framing,
-etc\&., so there may be BUGs hidden in them\&.
+Since the old version of
+.B WinPcap
+does not support PPP/VPN connection on Windows Vista or above, the new version
+of
+.B Npcap
+must be installed so that the Proberoute can detect routing on the PPP/VPN
+connection\&.
 .PP
-Because of IPsec with Authentication Header (AH) or Encapsulating
-Security Payload (ESP) can not be captured by \fBLibPcap\fP,
-Proberoute implements the \fBrecvfrom(2)\fP for capturing the ICMP Raw
-Socket to work around it, use \fB\-vvvv\fP flags can watch which
-capture catch the packet\&.
+In addition to the pcap filter, Proberoute supports receiving data from raw
+sockets (by
+.I recvfrom
+on Unix/Linux,
+.I WSARecvFrom
+on Windows), user can specify Proberoute receiving data through raw sockets via
+the environment variable \fBPROBE\_RECV\fP, Use \fB\-vvv\fP flags can
+watch which capture catch the packet\&:
+.PP
+.ft CW
+.nf
+  $ sudo PROBE_RECV=1 ./proberoute -vvv -icmp google.com
+.fi
+.ft R
+.PP
+Because of IPsec with Authentication Header (AH) or Encapsulating Security
+Payload (ESP) can not be captured by \fBlibpcap\fP, in this case, should detect
+the route by raw sockets\&. Due to the limitations of most operating systems, 
+TCP data is not allowed to be received directly by raw socket, so when using the
+TCP protocol to detect routing, the '*' (asterisk)  may still be displayed after
+reaching the destination\&. On Windows, the TCP protocol cannot be used to
+detect routing on the PPP/VPN connection, and normal connection may not be able
+to detect routing on overly noisy ports\&.
 .PP
 On Windows system, when Proberoute received ICMP Fragmentation Needed
 error message, if use the same size of message to traceroute again,
 will trigger "message too long" error, must reduce the message size to
-the path MTU size\&.
+the path MTU\&.
 .PP
-If you found any bug, please report it to Cun Gong
-<gong_cun@bocmacau.com>, thank you very much\&.
+Since I have no environment to test these link types such as IEEE
+802.11 wireless LAN, PPPoE, SLIP, or Cisco PPP with HDLC framing,
+etc\&., so there may be BUGs hidden in them\&. If you found any bug, please
+report it to Cun Gong <gong_cun@bocmacau.com>, thank you very much\&.

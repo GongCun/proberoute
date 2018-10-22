@@ -1,7 +1,7 @@
-CC = c++ -Wall -Wno-parentheses -g
+CC = c++ -g -Wall -Wno-parentheses -Wno-deprecated
 ##override CFLAGS += -DHAVE_REMOTE -D_DEBUG
 override CFLAGS += -DHAVE_REMOTE
 ##override CPPFLAGS += -DHAVE_REMOTE -D_DEBUG
 override CPPFLAGS += -DHAVE_REMOTE
-override LIBS += -lpopt -lpthread -lwpcap
+override LIBS += -lpopt -lwpcap
 override LDFLAGS += -L/usr/local/lib/x64

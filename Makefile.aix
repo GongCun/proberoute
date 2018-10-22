@@ -1,4 +1,6 @@
-CC = xlC_r -g
-override CFLAGS += -qrtti -qflag=i:i -qinfo=use
-override CPPFLAGS += -qrtti -qflag=i:i -qinfo=use
-override LIBS += -lpcap -lpopt -lpthread
+CC = xlC -g
+#override CFLAGS += -qrtti -qflag=i:i -qinfo=use
+#override CPPFLAGS += -qrtti -qflag=i:i -qinfo=use
+override CFLAGS += -qrtti -qflag=i:i
+override CPPFLAGS += -qrtti -qflag=i:i
+override LIBS += -lpcap -lpopt

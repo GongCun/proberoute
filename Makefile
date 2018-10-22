@@ -5,7 +5,7 @@ VERSION = 1.0
 BINDIR = /usr/local/bin
 MANDIR = /usr/local/share/man/man1
 LIBDIR = /usr/local/lib
-DLLFILE := getmac.dll
+DLLFILE := winsock.dll Packet.dll wpcap.dll
 
 ifeq (AIX, $(OS))
 include Makefile.aix
@@ -19,8 +19,8 @@ OBJS = main.o ProbeAddressInfo.o ProbeException.o ProbePcap.o ProbeSock.o \
 options.o
 
 ifeq (CYGWIN, $(OS))
-OBJS += getmac.dll
-override LIBS += -lgetmac
+OBJS += ${DLLFILE}
+override LIBS += -lwinsock
 override LDFLAGS += -L.
 endif
 
@@ -39,7 +39,7 @@ define install-func
       install ${PROGS} ${DESTDIR}${BINDIR} && (cd ${DESTDIR}${BINDIR};		\
         strip ${PROGS} && chmod 4755 ${PROGS});					\
       echo copy $(DLLFILE) to ${DESTDIR}${BINDIR};				\
-      install ${DLLFILE} ${DESTDIR}${BINDIR} && (cd ${DESTDIR}${BINDIR};	\
+      cp -p ${DLLFILE} ${DESTDIR}${BINDIR} && (cd ${DESTDIR}${BINDIR};	\
         strip ${DLLFILE} && chmod 755 ${DLLFILE});				\
   fi
 
@@ -65,12 +65,20 @@ proberoute: $(OBJS)
 
 ifeq (CYGWIN, $(OS))
   # must use C compile mode
-  objects = getmac.o getroute.o
-  $(objects): %.o: %.c getmac.h
+objects = getmac.o getroute.o win_rawsock.o
+$(objects): %.o: %.c getmac.h win_rawsock.h
 	cc -Wall -g -c -o $@ $<
 
-  getmac.dll: $(objects)
+winsock.dll: $(objects)
 	cc -shared -o $@ $^ -lws2_32
+
+Packet.dll wpcap.dll: GetDllDirectory
+Packet.dll wpcap.dll: DllDirectory := $(shell `pwd -P`/GetDllDirectory)
+# Packet.dll wpcap.dll:
+	# @ls -1 '${DllDirectory}' | grep $@ | while read line; do cp -p '${DllDirectory}'\\$$line .; done
+
+GetDllDirectory: GetDllDirectory.c
+	cc -g -Wall -mwindows -o GetDllDirectory GetDllDirectory.c
 endif
 
 %.o: %.cpp ProbeRoute.hpp config.h usage.h
@@ -83,19 +91,23 @@ usage.h: usage.txt
 install: $(PROGS) $(PROGS).1
 	$(install-func)
 
-man: $(PROGS)_man.pdf
+man: doc/$(PROGS)_man.pdf
 
-$(PROGS)_man.pdf: $(PROGS).1
+doc/$(PROGS)_man.pdf: $(PROGS).1
+	@mkdir -p doc
 	$(if $(filter AIX,$(OS)),\
-	troff -man -Tpsc <$< | psc >$(PROGS).ps,\
-	groff -man -Tps <$< >$(PROGS).ps)
-	ps2pdf $(PROGS).ps $@
+	troff -man -Tpsc <$< | psc >doc/$(PROGS).ps,\
+	groff -man -Tps <$< >doc/$(PROGS).ps)
+	cd doc && ps2pdf $(PROGS).ps $(subst doc/,,$@)
+
+BUILDDIR := build
+.PHONY: clean_build
+clean_build:
+	@rm -rf ${BUILDDIR}/*
 
 ifeq (CYGWIN, $(OS))
   # copy the DLL file to build folder
-  BUILDDIR := build
-
-  build: $(PROGS)
+  build: $(PROGS) clean_build
 	@[ -d ${BUILDDIR}/ ] || mkdir -p ${BUILDDIR}/
 	@cygcheck $(PROGS) | sed '1d' | grep -e cygwin -e pcap -e packet | sed 's/\\/\\\\/g' | \
 	while read f; do cp -p $$f ${BUILDDIR}/; done
@@ -103,4 +115,4 @@ ifeq (CYGWIN, $(OS))
 endif
 
 clean:
-	rm -f ${PROGS} ${PROGS}.exe *.o *.dll core *.BAK *~ usage.h
+	rm -rf ${PROGS} ${PROGS}.exe *.o *.dll core *.BAK *~ usage.h ${BUILDDIR}

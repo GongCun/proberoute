@@ -52,11 +52,11 @@ typedef struct _IP_ADAPTER_INFO
     time_t          LeaseExpires; 
 } IP_ADAPTER_INFO, *PIP_ADAPTER_INFO;
  
-
-// Functions
+ 
+//Functions
 static DWORD GetMacAddress(unsigned char * , struct in_addr, PULONG); 
  
-// Loads from Iphlpapi.dll
+//Loads from Iphlpapi.dll
 typedef DWORD (WINAPI* psendarp)(
     struct in_addr DestIP,
     struct in_addr SrcIP,
@@ -78,7 +78,7 @@ static BOOL getMacInit()
 {
     WSADATA firstsock;
      
-    if (WSAStartup(MAKEWORD(2,2), &firstsock) != 0) 
+    if (WSAStartup(MAKEWORD(2,2),&firstsock) != 0) 
     {
         fprintf(stderr, "\nFailed to initialise winsock.");
         fprintf(stderr, "\nError Code : %d", WSAGetLastError());
@@ -86,7 +86,7 @@ static BOOL getMacInit()
     }
  
     HINSTANCE hDll = LoadLibrary("iphlpapi.dll");
-
+         
     GetAdaptersInfo = (pgetadaptersinfo)GetProcAddress(hDll, "GetAdaptersInfo");
     if(GetAdaptersInfo == NULL)
     {
@@ -95,15 +95,15 @@ static BOOL getMacInit()
     }
 
     SendArp = (psendarp)GetProcAddress(hDll,"SendARP");
-    if(SendArp == NULL)
+    if(SendArp==NULL)
     {
         fprintf(stderr, "SendArp error in iphlpapi.dll %d", GetLastError());
         return FALSE;
-    }
+            }
 
     return TRUE;
 }
-
+ 
 /*
     Get the mac address of a given ip
 */
@@ -114,14 +114,14 @@ static DWORD GetMacAddress(unsigned char *mac , struct in_addr destip, PULONG pP
     ULONG MacAddr[2];
     int i;
  
-    srcip.s_addr = 0;
+    srcip.s_addr=0;
  
-    // Send an arp packet
+    //Send an arp packet
     ret = SendArp(destip , srcip , MacAddr , pPhyAddrLen);
     if (ret == NO_ERROR) {
-	// Prepare the mac address
+	//Prepare the mac address
 	if(*pPhyAddrLen) {
-	    BYTE *bMacAddr = (BYTE *)&MacAddr;
+	    BYTE *bMacAddr = (BYTE *) & MacAddr;
 	    for (i = 0; i < (int)*pPhyAddrLen; i++) {
 		mac[i] = (char)bMacAddr[i];
 	    }
@@ -141,7 +141,7 @@ int getmac(const char *destip, unsigned char *buf)
     DWORD ret;
     int PhyAddrLen = 6;         /* default MacAddress length */
     struct in_addr destaddr;
-
+    
     if (!doInit && !(doInit = getMacInit())) {
         return -2;
     }
@@ -155,19 +155,19 @@ int getmac(const char *destip, unsigned char *buf)
      *  address could not be reached because it is not on the same
      *  subnet or the destination computer is not operating. */
     if (ret == ERROR_NOT_FOUND || ret == ERROR_BAD_NET_NAME)
-	return -1;
+    return -1;
 
     fprintf(stderr, "GetMacAddress failed with error: %d\n", ret);
     return -2;
-}
-
+    }
+ 
 /* Return MacAddress Length:
  *   >=  0: MacAddress Length
  *    = -1: Not found address
  *    = -2: Other error
  */
 int getmacByDevice(const char *device, unsigned char *buf)
-{
+    {
     DWORD dwRetVal = 0;
     PIP_ADAPTER_INFO pAdapterInfo;
     PIP_ADAPTER_INFO pAdapter = NULL;
@@ -177,7 +177,7 @@ int getmacByDevice(const char *device, unsigned char *buf)
     if (!doInit && !(doInit = getMacInit())) {
         return -2;
     }
-    
+
     pAdapterInfo = (IP_ADAPTER_INFO *) malloc(sizeof (IP_ADAPTER_INFO));
     if (pAdapterInfo == NULL) {
         fprintf(stderr, "Error allocating memory needed to call GetAdaptersinfo\n");
@@ -200,21 +200,22 @@ int getmacByDevice(const char *device, unsigned char *buf)
         while (pAdapter) {
             if (strcmp(device, pAdapter->AdapterName) == 0) {
                 if (pAdapter->Type != MIB_IF_TYPE_ETHERNET &&
-                    pAdapter->Type != IF_TYPE_IEEE80211
+                    pAdapter->Type != IF_TYPE_IEEE80211 &&
+                    pAdapter->Type != MIB_IF_TYPE_PPP /* No support */
                 ) {
                     printf("not support type %d\n", pAdapter->Type);
                     return -1; /* only support ethernet */
                 }
 
-		PhyAddrLen = getmac(pAdapter->IpAddressList.IpAddress.String, buf);
+                PhyAddrLen = getmac(pAdapter->IpAddressList.IpAddress.String, buf);
                 free(pAdapterInfo);
-		return PhyAddrLen;
+                return PhyAddrLen;
             }
             pAdapter = pAdapter->Next;
         }
     }
     else {
-	fprintf(stderr, "GetAdaptersInfo failed with error: %d\n", dwRetVal);
+        fprintf(stderr, "GetAdaptersInfo failed with error: %d\n", dwRetVal);
         return -2;
     }
 

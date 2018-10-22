@@ -53,3 +53,15 @@ Options
 -l, --list        Print the list of the network interface avaiable on the
                   system,  but Proberoute can't sniff loopback packets on
                   Windows system.
+--simulate        When the connection is established, to detect the route by
+                  sending a order bye packet, which must be used with --conn
+		  option.
+--reverse         Set the TTL of the probe packet decreased from large to
+                  small. Used to evade the Cisco ASA firewall
+                  ttl-evasion-protection policy.
+--retransmit      Retransmit the specified packet in interactive mode, should be
+                  used with --conn and --interact option.
+--interact        When the connection is established, control the frequency of
+                  sending bytes through this option. Each time a line read from
+                  stdin, write() sends a "\x00" byte. This option can be used
+                  with tcpdump and Unix discard service.

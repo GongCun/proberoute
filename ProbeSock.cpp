@@ -2,7 +2,17 @@
 #include <assert.h>
 #include <errno.h>
 
+static int get_distance(int ttl)
+{
+    
+    int i = 1;
+    while (i - ttl < 0)
+	i *= 2;
 
+    return i - ttl;
+}
+
+        
 int ProbeSock::openSock(const int protocol) throw(ProbeException)
 {
     int rawfd;
@@ -12,23 +22,23 @@ int ProbeSock::openSock(const int protocol) throw(ProbeException)
 
 #if defined _LINUX || defined _CYGWIN
     if ((rawfd = socket(AF_INET, SOCK_RAW, IPPROTO_RAW)) < 0)
-	throw ProbeException("socket IPPROTO_RAW");
+        throw ProbeException("socket IPPROTO_RAW");
 #else
     if ((rawfd = socket(AF_INET, SOCK_RAW, protocol)) < 0) {
-	msg << "socket protocol " << protocol;
-	throw ProbeException(msg.str());
+        msg << "socket protocol " << protocol;
+        throw ProbeException(msg.str());
     }
 #endif
 
     if (setsockopt(rawfd, IPPROTO_IP, IP_HDRINCL, &on, sizeof(on)) < 0)
-	throw ProbeException("setsockopt IP_HDRINCL");
+        throw ProbeException("setsockopt IP_HDRINCL");
 
     // OK if setsockopt fails 
     setsockopt(rawfd, SOL_SOCKET, SO_RCVBUF, &size, sizeof(size));
     setsockopt(rawfd, SOL_SOCKET, SO_SNDBUF, &size, sizeof(size));
     
     if (setsockopt(rawfd, SOL_SOCKET, SO_BROADCAST, &on, sizeof(on)) < 0)
-	throw ProbeException("setsockopt SO_BROADCAST");
+        throw ProbeException("setsockopt SO_BROADCAST");
 
     return rawfd;
 }
@@ -89,7 +99,7 @@ ssize_t ProbeSock::sendPacket(const void *buf, size_t buflen, int flags, const s
     throw(ProbeException)
 {
 #ifdef _CYGWIN
-    if (protocol == IPPROTO_TCP) {
+    if (!getenv("PROBE_RECV") && protocol == IPPROTO_TCP) {
         
         assert(Sendfp);
         assert(EtherLen > 0);
@@ -101,13 +111,15 @@ ssize_t ProbeSock::sendPacket(const void *buf, size_t buflen, int flags, const s
         if (pcap_sendpacket(Sendfp, (const u_char *)tcpbuf, EtherLen + buflen) != 0)
             throw ProbeException("pcap_sendpacket error", pcap_geterr(Sendfp));
 
+        // std::cerr << "Have sent TCP" << std::endl;
+
         return EtherLen + buflen;
     }
 #endif
     ssize_t len;
     
     if ((len = sendto(rawfd, buf, buflen, flags, to, tolen)) != (ssize_t)buflen)
-	throw ProbeException("sendto error");
+        throw ProbeException("sendto error");
 
     // std::cerr << "sendto " << len << " bytes\n";
 
@@ -115,8 +127,8 @@ ssize_t ProbeSock::sendPacket(const void *buf, size_t buflen, int flags, const s
 }
 
 int ProbeSock::sendFragPacket(const u_char *tcpbuf, const int packlen,
-			      const u_char ttl, const int fragsize,
-			      const struct sockaddr *to, socklen_t tolen) throw(ProbeException)
+                              const u_char ttl, const int fragsize,
+                              const struct sockaddr *to, socklen_t tolen) throw(ProbeException)
 {
     u_char buf[MAX_MTU];
     const u_char *ptr = tcpbuf;
@@ -128,24 +140,24 @@ int ProbeSock::sendFragPacket(const u_char *tcpbuf, const int packlen,
         throw ProbeException("fragment size must be a multiple of 8");
 
     while (remlen) {
-	sendlen = std::min(remlen, fragsize);
+        sendlen = std::min(remlen, fragsize);
         if (remlen <= fragsize) {
             if (remlen == packlen) // if packlen <= fragment size, can't be split
                 flags = IP_DF;
-            else		   // exactly the last packet
+            else                   // exactly the last packet
                 flags = offset >> 3;
         } else {
             flags = (offset >> 3) | IP_MF;
         }
 
         iplen = buildIpHeader(buf, sendlen, ttl, flags);
-	memcpy(buf + iplen, ptr, sendlen);
-	// The ICMP data on AIX can't be less than 8 bytes, so pad at
-	// least 8 bytes.
-	sendPacket(buf, iplen + (sendlen < 8 ? 8 : sendlen), 0, to, tolen);
-	offset += sendlen;
-	remlen -= sendlen;
-	ptr += sendlen;
+        memcpy(buf + iplen, ptr, sendlen);
+        // The ICMP data on AIX can't be less than 8 bytes, so pad at
+        // least 8 bytes.
+        sendPacket(buf, iplen + (sendlen < 8 ? 8 : sendlen), 0, to, tolen);
+        offset += sendlen;
+        remlen -= sendlen;
+        ptr += sendlen;
     }
 
     return packlen;
@@ -173,9 +185,12 @@ int TcpProbeSock::buildProtocolHeader(
     tcp->th_off = tcphdrLen >> 2;
     tcp->th_flags = tcpflags;
     tcp->th_urp = (tcpflags & TH_URG && protoLen - tcphdrLen) ?
-                  htons(1) : 0;   // urgent pointer
-    tcp->th_win = htons(MAX_MTU); // default 65535
-    tcp->th_sum = 0;              // calculate later
+                  htons(1) : 0;		// urgent pointer
+    if (capwin)
+	tcp->th_win = htons(capwin);
+    else
+	tcp->th_win = htons(MAX_MTU);	// default 65535
+    tcp->th_sum = 0;			// calculate later
 
     if (tcphdrLen > PROBE_TCP_LEN) {
         assert(tcphdrLen - PROBE_TCP_LEN == tcpoptLen);
@@ -184,15 +199,18 @@ int TcpProbeSock::buildProtocolHeader(
     }
     
     if (badsum) {
-        tcp->th_sum = (u_short)Rand() & 0xffff;
+	if (getenv("CHECKSUM_ZERO"))
+	    tcp->th_sum = (u_short)0x0000 & 0xffff;
+	else
+	    tcp->th_sum = (u_short)Rand() & 0xffff;
     } else {
-	sum = in_checksum((uint16_t *)&srcAddr, 4);
-	sum += in_checksum((uint16_t *)&dstAddr, 4);
-	sum += ntohs(IPPROTO_TCP + protoLen);
-	sum += in_checksum((uint16_t *)tcp, protoLen);
+        sum = in_checksum((uint16_t *)&srcAddr, 4);
+        sum += in_checksum((uint16_t *)&dstAddr, 4);
+        sum += ntohs(IPPROTO_TCP + protoLen);
+        sum += in_checksum((uint16_t *)tcp, protoLen);
         tcp->th_sum = CKSUM_CARRY(sum);
 #ifdef _DEBUG
-	std::printf("tcp->th_sum = 0x%04x\n", ntohs(tcp->th_sum));
+        std::printf("tcp->th_sum = 0x%04x\n", ntohs(tcp->th_sum));
 #endif
     }
 
@@ -308,6 +326,9 @@ int ProbeSock::recvIcmp(const u_char *buf, const int len)
             
         }
 
+	if (reverse)
+	    distance = get_distance(ip->ip_ttl);
+	
         return ((type == ICMP_TIMXCEED) ? -1 : code + 1);
     }
 
@@ -350,19 +371,20 @@ bool TcpProbeSock::capWrite(
 
     // obtain the write() packet after connection established
     if (
-	tcp->th_sport == htons(sport) &&
+        tcp->th_sport == htons(sport) &&
         tcp->th_dport == htons(dport) &&
-	tcp->th_flags & TH_PUSH
+        tcp->th_flags & TH_PUSH
     ) {
         ipid = ntohs(ip->ip_id);
         seq = ntohl(tcp->th_seq);
         ack = ntohl(tcp->th_ack);
-	if ((ipoptlen = iplen - PROBE_IP_LEN) > 0) {
-	    memcpy(ipopt, (u_char *)ip + PROBE_IP_LEN, ipoptlen);
-	}
-	if ((tcpoptlen = tcplen - PROBE_TCP_LEN) > 0) {
-	    memcpy(tcpopt, (u_char *)tcp + PROBE_TCP_LEN, tcpoptlen);
-	}
+	capwin = ntohs(tcp->th_win);
+        if ((ipoptlen = iplen - PROBE_IP_LEN) > 0) {
+            memcpy(ipopt, (u_char *)ip + PROBE_IP_LEN, ipoptlen);
+        }
+        if ((tcpoptlen = tcplen - PROBE_TCP_LEN) > 0) {
+            memcpy(tcpopt, (u_char *)tcp + PROBE_TCP_LEN, tcpoptlen);
+        }
         return true;
     }
 
@@ -370,7 +392,7 @@ bool TcpProbeSock::capWrite(
     
 }
 
-   
+
 int TcpProbeSock::recvTcp(const u_char *buf, int len)
 {
     //
@@ -384,7 +406,7 @@ int TcpProbeSock::recvTcp(const u_char *buf, int len)
     const struct ip *ip;
     const struct tcphdr *tcp;
     int iplen, tcplen;
-
+    
     ip = (struct ip *)buf;
     iplen = ip->ip_hl << 2;
 
@@ -400,30 +422,44 @@ int TcpProbeSock::recvTcp(const u_char *buf, int len)
         return 0;
 
     // TCP RFC 793 (Page 65) 
-    if (tcp->th_sport == htons(dport) &&
+    if (
+	tcp->th_sport == htons(dport) &&
         tcp->th_dport == htons(sport) &&
         (
-	    // send SYN packet when state is listen
-	    ntohl(tcp->th_ack) == tcpseq + 1 ||
-	    // send non-SYN packet with out-of-order SEQ or any ACK
-	    // when state is closed/listen 
-	    (ntohl(tcp->th_seq) == tcpack && tcp->th_flags & TH_RST) ||
-	    // send out-of-order SEQ when state is established
-	    (ntohl(tcp->th_ack) == tcpseq - 1)
-	))
-        return (tcp->th_flags & TH_RST) ? 1 : 2;
+            // Send SYN packet when state is listen.
+            ntohl(tcp->th_ack) == tcpseq + 1 ||
+            // Send non-SYN packet with out-of-order SEQ or any ACK
+            // when state is closed/listen.
+            (ntohl(tcp->th_seq) == tcpack && tcp->th_flags & TH_RST) ||
+            // Send out-of-order SEQ when state is established.
+            (ntohl(tcp->th_ack) == tcpseq - 1) ||
+            // Send order SEQ when state is established.
+	    (ntohl(tcp->th_ack) == tcpseq + pmtu - ipoptLen - tcpoptLen - 40) ||
+	    // TCP Keep-Alive or ACK (Maybe DUP ACK)
+            ntohl(tcp->th_ack) >= tcpseq
+        )
+    )
+	{
+	    if (reverse) {
+		hostreach = true;
+		distance = get_distance(ip->ip_ttl);
+	    }
+	    
+	    return (tcp->th_flags & TH_RST) ? 1 : 2;
+	}
 
     return 0;
 }
-        
+
+
 int TcpProbeSock::nonbConn(int fd, const struct sockaddr *addr, socklen_t addrlen,
                            int nsec, unsigned long msec)
 {
     /* Return
        -1: failed
-        0: success
-        1: connection refused
-        2: connection timed out
+       0: success
+       1: connection refused
+       2: connection timed out
     */
 
     int flags;
@@ -434,17 +470,17 @@ int TcpProbeSock::nonbConn(int fd, const struct sockaddr *addr, socklen_t addrle
     struct timeval tv;
 
     if ((flags = fcntl(fd, F_GETFL, 0)) < 0)
-	return -1;
+        return -1;
     if (fcntl(fd, F_SETFL, flags | O_NONBLOCK) < 0)
-	return -1;
+        return -1;
 
     error = 0;
     if ((n = connect(fd, addr, addrlen)) < 0 &&
-	errno != EINPROGRESS)
-	    return -1;            // host is down, no route to host, etc.
+        errno != EINPROGRESS)
+        return -1;              // host is down, no route to host, etc.
 
     if (n == 0)
-	goto done;                // connect completed immediately
+        goto done;              // connect completed immediately
 
     FD_ZERO(&rset);
     FD_SET(fd, &rset);
@@ -454,30 +490,30 @@ int TcpProbeSock::nonbConn(int fd, const struct sockaddr *addr, socklen_t addrle
 
     if (select(fd + 1, &rset, &wset, NULL,
                (nsec || msec) ? &tv : NULL) == 0) {
-	errno = ETIMEDOUT;
-	return 2;
+        errno = ETIMEDOUT;
+        return 2;
     }
 
     if (FD_ISSET(fd, &rset) || FD_ISSET(fd, &wset)) {
-	len = sizeof(error);
-	if (getsockopt(fd, SOL_SOCKET, SO_ERROR, &error, &len) < 0) {
-	    return (errno == ECONNREFUSED) ? 1 : -1; // Solaris pending error
-	}
+        len = sizeof(error);
+        if (getsockopt(fd, SOL_SOCKET, SO_ERROR, &error, &len) < 0) {
+            return (errno == ECONNREFUSED) ? 1 : -1; // Solaris pending error
+        }
     } else {
-        return -1;                // fd not set
+        return -1;                                   // socket fd not set
     }
     
-done:
+  done:
     /* restore file status flags */
     if (fcntl(fd, F_SETFL, flags) < 0)
-	return -1;
+        return -1;
 	
     if (error) {
-	errno = error;
-	return (errno == ECONNREFUSED) ? 1 : -1;
+        errno = error;
+        return (errno == ECONNREFUSED) ? 1 : -1;
     }
 	
-    return 0;                     // connection established
+    return 0;                   // connection established
 }
 
 
@@ -499,12 +535,15 @@ int UdpProbeSock::buildProtocolHeader(
     udp->uh_sum = 0;              // calculate later
 
     if (badsum) {
-        udp->uh_sum = (u_short)Rand() & 0xffff;
+	if (getenv("CHECKSUM_ZERO"))
+	    udp->uh_sum = (u_short)0x0000 & 0xffff;
+	else
+	    udp->uh_sum = (u_short)Rand() & 0xffff;
     } else {
-	sum = in_checksum((uint16_t *)&srcAddr, 4);
-	sum += in_checksum((uint16_t *)&dstAddr, 4);
-	sum += ntohs(IPPROTO_UDP + protoLen);
-	sum += in_checksum((uint16_t *)udp, protoLen);
+        sum = in_checksum((uint16_t *)&srcAddr, 4);
+        sum += in_checksum((uint16_t *)&dstAddr, 4);
+        sum += ntohs(IPPROTO_UDP + protoLen);
+        sum += in_checksum((uint16_t *)udp, protoLen);
         udp->uh_sum = CKSUM_CARRY(sum);
     }
 
@@ -532,25 +571,28 @@ int IcmpProbeSock::buildProtocolHeader(
     icmp->icmp_seq = htons(icmpSeq);
 
     if (icmpType == ICMP_TSTAMP ||
-	icmpType == ICMP_TSTAMPREPLY
+        icmpType == ICMP_TSTAMPREPLY
     ) {
-	if (gettimeofday(&tvorig, (struct timezone *)NULL) < 0) {
-	    perror("gettimeofday");
-	    exit(1);
-	}
-	tsorig = tvorig.tv_sec % (24 * 60 * 60) * 1000 + tvorig.tv_usec / 1000;
-	icmp->icmp_otime = htonl(tsorig);
+        if (gettimeofday(&tvorig, (struct timezone *)NULL) < 0) {
+            perror("gettimeofday");
+            exit(1);
+        }
+        tsorig = tvorig.tv_sec % (24 * 60 * 60) * 1000 + tvorig.tv_usec / 1000;
+        icmp->icmp_otime = htonl(tsorig);
 
-	if (icmpType == ICMP_TSTAMP)
-	    icmp->icmp_rtime = icmp->icmp_ttime = 0;
-	else
-	    icmp->icmp_rtime = icmp->icmp_ttime = icmp->icmp_otime;
+        if (icmpType == ICMP_TSTAMP)
+            icmp->icmp_rtime = icmp->icmp_ttime = 0;
+        else
+            icmp->icmp_rtime = icmp->icmp_ttime = icmp->icmp_otime;
     }
 
     if (badsum) {
-        icmp->icmp_cksum = (u_short)Rand() & 0xffff;
+	if (getenv("CHECKSUM_ZERO"))
+	    icmp->icmp_cksum = (u_short)0x0000 & 0xffff;
+	else
+	    icmp->icmp_cksum = (u_short)Rand() & 0xffff;
     } else {
-	sum = in_checksum((uint16_t *)icmp, protoLen);
+        sum = in_checksum((uint16_t *)icmp, protoLen);
         icmp->icmp_cksum = CKSUM_CARRY(sum);
     }
 
@@ -575,7 +617,6 @@ int IcmpProbeSock::recvIcmp(const u_char *buf, const int len)
     int iplen, icmplen, origiplen;
     static int *mtuptr = mtus;
     
-
     ip = (struct ip *)buf;
     iplen = ip->ip_hl << 2;
     if (iplen < PROBE_IP_LEN || ip->ip_p != IPPROTO_ICMP)
@@ -584,23 +625,24 @@ int IcmpProbeSock::recvIcmp(const u_char *buf, const int len)
     if ((icmplen = len - iplen) < PROBE_ICMP_LEN)
         return 0;
 
-
     icmp = (struct icmp *)(buf + iplen);
     type = icmp->icmp_type;
     code = icmp->icmp_code;
 
     if (type == ICMP_ECHOREPLY ||
         type == ICMP_TSTAMPREPLY) {
-	if (icmp->icmp_id == htons(icmpId) &&
-	    icmp->icmp_seq == htons(icmpSeq) &&
-            ip->ip_id != htons(ipid)) // ensure the message is not sent by
-				      // ourselves
-	    return -3;
+
+        if (icmp->icmp_id == htons(icmpId) &&
+            icmp->icmp_seq == htons(icmpSeq) &&
+            ip->ip_id != htons(ipid)) // ensure the message is not sent by ourselves
+            return -3;
+
     }
+
     else if ((type == ICMP_TIMXCEED && code == ICMP_TIMXCEED_INTRANS) ||
              type == ICMP_UNREACH ||
              type == ICMP_PARAMPROB) {
-        
+
         origip = (struct ip *)(buf + iplen + PROBE_ICMP_LEN);
         origiplen = origip->ip_hl << 2;
 
@@ -634,9 +676,13 @@ int IcmpProbeSock::recvIcmp(const u_char *buf, const int len)
                 pmtu = *mtuptr++;
             
         }
-
         return ((type == ICMP_TIMXCEED) ? -1 : code + 1);
     }
+
+    // printf("ICMP_TIMXCEED = %d, ICMP_TIMXCEED_INTRANS = %d\n", ICMP_TIMXCEED, ICMP_TIMXCEED_INTRANS);
+    
+    printf("type = %d, code = %d\n", type, code);
+    
     return 0;
 }
  
@@ -681,24 +727,24 @@ int UdpProbeSock::recvIcmp(const u_char *buf, const int len)
         if (icmplen < PROBE_ICMP_LEN + origiplen + 8)
             return 0;
         
-	// Some system don't fill the original ip id correctly, so check the
-	// original source/destination port instead of checking ip id.
+        // Some system don't fill the original ip id correctly, so check the
+        // original source/destination port instead of checking ip id.
         if (origip->ip_dst.s_addr != dstAddr.s_addr ||
-	    origip->ip_p != IPPROTO_UDP)
+            origip->ip_p != IPPROTO_UDP)
             return 0;
 
-	const struct udphdr *udp;
-	udp = (struct udphdr *)((u_char *)origip + origiplen);
-	if (udp->uh_sport != htons(sport) ||
-	    udp->uh_dport != htons(dport))
-	    return 0;
+        const struct udphdr *udp;
+        udp = (struct udphdr *)((u_char *)origip + origiplen);
+        if (udp->uh_sport != htons(sport) ||
+            udp->uh_dport != htons(dport))
+            return 0;
 
         // IP header bad length
         if (type == ICMP_PARAMPROB &&
             *((u_char *)origip + 20) == 0x44)
             return -2;
 
-	// Need fragment
+        // Need fragment
         if (type == ICMP_UNREACH && code == ICMP_UNREACH_NEEDFRAG) {
 #ifdef HAVE_ICMP_NEXTMTU
             pmtu = ntohs(icmp->icmp_nextmtu);
@@ -713,6 +759,9 @@ int UdpProbeSock::recvIcmp(const u_char *buf, const int len)
                 pmtu = *mtuptr++;
             
         }
+
+	if (reverse)
+	    distance = get_distance(ip->ip_ttl);
 
         return ((type == ICMP_TIMXCEED) ? -1 : code + 1);
     }
@@ -733,7 +782,7 @@ int setAddrByName(const char *host, struct in_addr *addr)
     hints.ai_socktype = 0;
 
     if (getaddrinfo(host, NULL, &hints, &res) != 0)
-	return -1;
+        return -1;
 
     inaddr = (struct sockaddr_in *)res->ai_addr;
     memmove(addr, &inaddr->sin_addr, sizeof(struct in_addr));
