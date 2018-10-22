@@ -73,9 +73,11 @@ winsock.dll: $(objects)
 	cc -shared -o $@ $^ -lws2_32
 
 Packet.dll wpcap.dll: GetDllDirectory
-Packet.dll wpcap.dll: DllDirectory := $(shell `pwd -P`/GetDllDirectory)
 Packet.dll wpcap.dll:
-	@ls -1 '${DllDirectory}' | grep $@ | while read line; do cp -p '${DllDirectory}'\\$$line .; done
+	@export PATH=$$PATH:.; \
+		DllDirectory=`GetDllDirectory`; \
+		ls -1 $$DllDirectory | grep $@ | \
+		while read line; do cp -p ''$${DllDirectory}''\\$$line .; done
 
 GetDllDirectory: GetDllDirectory.c
 	cc -g -Wall -mwindows -o GetDllDirectory GetDllDirectory.c
@@ -115,4 +117,4 @@ ifeq (CYGWIN, $(OS))
 endif
 
 clean:
-	rm -rf ${PROGS} ${PROGS}.exe *.o *.dll core *.BAK *~ usage.h ${BUILDDIR} GetDllDirectory.exe
+	rm -rf ${PROGS} *.exe *.o *.dll core *.BAK *~ usage.h ${BUILDDIR}
