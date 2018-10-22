@@ -74,8 +74,8 @@ winsock.dll: $(objects)
 
 Packet.dll wpcap.dll: GetDllDirectory
 Packet.dll wpcap.dll: DllDirectory := $(shell `pwd -P`/GetDllDirectory)
-# Packet.dll wpcap.dll:
-	# @ls -1 '${DllDirectory}' | grep $@ | while read line; do cp -p '${DllDirectory}'\\$$line .; done
+Packet.dll wpcap.dll:
+	@ls -1 '${DllDirectory}' | grep $@ | while read line; do cp -p '${DllDirectory}'\\$$line .; done
 
 GetDllDirectory: GetDllDirectory.c
 	cc -g -Wall -mwindows -o GetDllDirectory GetDllDirectory.c
