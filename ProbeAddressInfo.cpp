@@ -213,6 +213,9 @@ void ProbeAddressInfo::listDeviceInfo()
 	std::cout << i << ". ";
         deviceInfoPtr->list();
     }
+#ifdef _CYGWIN
+    listNdisWanAdapter(i);
+#endif
 
 }
 
