@@ -7,6 +7,8 @@ MANDIR = /usr/local/share/man/man1
 LIBDIR = /usr/local/lib
 DLLFILE := winsock.dll Packet.dll wpcap.dll
 
+export PATH := .:$(PATH)
+
 ifeq (AIX, $(OS))
 include Makefile.aix
 else ifeq (CYGWIN, $(OS))
@@ -73,9 +75,10 @@ winsock.dll: $(objects)
 	cc -shared -o $@ $^ -lws2_32
 
 Packet.dll wpcap.dll: GetDllDirectory
-Packet.dll wpcap.dll: DllDirectory := $(shell `pwd -P`/GetDllDirectory)
-# Packet.dll wpcap.dll:
-	# @ls -1 '${DllDirectory}' | grep $@ | while read line; do cp -p '${DllDirectory}'\\$$line .; done
+	@export PATH=$$PATH:.; \
+		DllDirectory=`GetDllDirectory`; \
+		ls -1 $$DllDirectory | grep $@ | \
+		while read line; do cp ''$${DllDirectory}''\\$$line .; done
 
 GetDllDirectory: GetDllDirectory.c
 	cc -g -Wall -mwindows -o GetDllDirectory GetDllDirectory.c
@@ -109,10 +112,10 @@ ifeq (CYGWIN, $(OS))
   # copy the DLL file to build folder
   build: $(PROGS) clean_build
 	@[ -d ${BUILDDIR}/ ] || mkdir -p ${BUILDDIR}/
-	@cygcheck $(PROGS) | sed '1d' | grep -e cygwin -e pcap -e packet | sed 's/\\/\\\\/g' | \
+	@cygcheck ./$(PROGS) | sed '1d' | grep -e cygwin -e pcap -e packet | sed 's/\\/\\\\/g' | \
 	while read f; do cp -p $$f ${BUILDDIR}/; done
 	cp -p $(PROGS) ${BUILDDIR}/ && strip ${BUILDDIR}/$(PROGS)
 endif
 
 clean:
-	rm -rf ${PROGS} ${PROGS}.exe *.o *.dll core *.BAK *~ usage.h ${BUILDDIR}
+	rm -rf ${PROGS} *.exe *.o *.dll core *.BAK *~ usage.h ${BUILDDIR}

@@ -32,6 +32,18 @@ On AIX
 On Windows (Cygwin)
 ============
 
+  $ mkdir -p /usr/local/include
+  $ cd /usr/local/include
+  $ mkdir -p backup
+  $ tar --exclude=backup -cvf backup/backup.tar ./*
+  $ rsync -av ${WinPcap_SDK}/Include/ /usr/local/include
+
+  $ mkdir -p /usr/local/lib
+  $ cd /usr/local/lib
+  $ mkdir -p backup
+  $ tar --exclude=backup -cvf backup/backup.tar ./*
+  $ rsync -av ${WinPcap_SDK}/Lib/ /usr/local/lib
+
   $ autoheader
   $ autoconf
 
