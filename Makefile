@@ -7,7 +7,7 @@ MANDIR = /usr/local/share/man/man1
 LIBDIR = /usr/local/lib
 DLLFILE := winsock.dll Packet.dll wpcap.dll
 
-export PATH := .:$(PATH)
+# export PATH := .:$(PATH)
 
 ifeq (AIX, $(OS))
 include Makefile.aix
@@ -17,13 +17,19 @@ else
 include Makefile.gcc
 endif
 
+PROGS = proberoute
+
+all: ${PROGS}
+
 OBJS = main.o ProbeAddressInfo.o ProbeException.o ProbePcap.o ProbeSock.o \
 options.o
 
 ifeq (CYGWIN, $(OS))
-OBJS += ${DLLFILE}
+OBJS += ${DLLFILE} listNdisWanAdapter.o
 override LIBS += -lwinsock
 override LDFLAGS += -L.
+listNdisWanAdapter.o: listNdisWanAdapter.c
+	cc -g -Wall -DHAVE_REMOTE -c -o $@ $<
 endif
 
 define install-func
@@ -58,11 +64,7 @@ define install-func
   fi
 endef
 
-PROGS = proberoute
-
-all: ${PROGS}
-
-proberoute: $(OBJS) 
+proberoute: $(OBJS)
 	${CC} ${CFLAGS} -D_$(OS) -o $@ $(filter-out %.dll,$^) $(LDFLAGS) $(LIBS)
 
 ifeq (CYGWIN, $(OS))
