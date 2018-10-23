@@ -78,10 +78,9 @@
 #ifdef _CYGWIN
 extern "C" {
 #include "getmac.h"
-// #include "win_rawsock.h"
 int win_rawsock(const struct sockaddr *addr, int addrlen);
-// int win_recvfrom(SOCKET s, char *buf, int len);
 int win_recvfrom(SOCKET s, char *buf, int len, const struct sockaddr *local);
+void listNdisWanAdapter(int i);
 }
 #endif
 
