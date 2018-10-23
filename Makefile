@@ -6,6 +6,7 @@ BINDIR = /usr/local/bin
 MANDIR = /usr/local/share/man/man1
 LIBDIR = /usr/local/lib
 DLLFILE := winsock.dll Packet.dll wpcap.dll
+INSTALL := /usr/bin/install
 
 # export PATH := .:$(PATH)
 
@@ -39,12 +40,12 @@ define install-func
     chmod 755 ${DESTDIR}${BINDIR}/)
 
   @if test $(OS) = AIX; then							\
-    install -s -S -f ${DESTDIR}${BINDIR}/ -M 4755 -O root -G system ${PROGS};	\
+    $(INSTALL) -s -S -f ${DESTDIR}${BINDIR}/ -M 4755 -O root -G system ${PROGS};	\
   elif test $(OS) != CYGWIN; then						\
-      install ${PROGS} ${DESTDIR}${BINDIR} && (cd ${DESTDIR}${BINDIR};		\
+      $(INSTALL) ${PROGS} ${DESTDIR}${BINDIR} && (cd ${DESTDIR}${BINDIR};		\
         strip ${PROGS} && chmod 4755 ${PROGS} && chown root ${PROGS});		\
   else										\
-      install ${PROGS} ${DESTDIR}${BINDIR} && (cd ${DESTDIR}${BINDIR};		\
+      $(INSTALL) ${PROGS} ${DESTDIR}${BINDIR} && (cd ${DESTDIR}${BINDIR};		\
         strip ${PROGS} && chmod 4755 ${PROGS});					\
       echo copy $(DLLFILE) to ${DESTDIR}${BINDIR};				\
       cp -p ${DLLFILE} ${DESTDIR}${BINDIR} && (cd ${DESTDIR}${BINDIR};	\
@@ -57,9 +58,9 @@ define install-func
     chmod 755 ${DESTDIR}${MANDIR}/)
 
   @if test $(OS) = AIX; then							\
-    install -s -f ${DESTDIR}${MANDIR}/ -M 644 -O root -G system ${PROGS}.1;	\
+    $(INSTALL) -s -f ${DESTDIR}${MANDIR}/ -M 644 -O root -G system ${PROGS}.1;	\
   else										\
-    install ${PROGS}.1 ${DESTDIR}${MANDIR} &&					\
+    $(INSTALL) ${PROGS}.1 ${DESTDIR}${MANDIR} &&					\
     (cd ${DESTDIR}${MANDIR}; chmod 644 ${PROGS}.1);				\
   fi
 endef
