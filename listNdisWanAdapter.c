@@ -24,5 +24,8 @@ void listNdisWanAdapter(int i) {
             printf("%d. %s\n", i++,d->name);
     }
 
+    /* We don't need any more the device list. Free it */
+    pcap_freealldevs(alldevs);
+
     return;
 }
