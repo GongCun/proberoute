@@ -54,7 +54,6 @@ ProbePcap::ProbePcap(const char *dev,
 #endif
 
     if (handle == NULL) {
-        std::cerr << d->name << std::endl;
         throw ProbeException("pcap_open_live", errbuf);
     }
 
