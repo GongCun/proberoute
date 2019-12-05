@@ -26,7 +26,7 @@ On AIX
   $ autoheader
   $ autoconf
   $ touch ./config.h && ./configure
-  $ make
+  $ gmake
   $ sudo gmake install
 
 On Windows (Cygwin)
